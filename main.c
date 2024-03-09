@@ -14,6 +14,7 @@ typedef enum {
     OPT_MULT,
     OPT_DIV,
     OPT_MOD,
+    OPT_LT,
     OPT_LIT_NUMBER,
     OPT_IDENT,
     OPT_DUMP,
@@ -33,6 +34,8 @@ char *optypeCStr(OPType op) {
         return "OPT_DIV";
     case OPT_MOD:
         return "OPT_MOD";
+    case OPT_LT:
+        return "OPT_LT";
     case OPT_LIT_NUMBER:
         return "OPT_LIT_NUMBER";
     case OPT_IDENT:
@@ -63,6 +66,8 @@ typedef struct {
     (OP) { .type = OPT_DIV }
 #define OP_MOD \
     (OP) { .type = OPT_MOD }
+#define OP_LT \
+    (OP) { .type = OPT_LT }
 #define OP_LIT_NUMBER(o) \
     (OP) { .type = OPT_LIT_NUMBER, .op = o }
 #define OP_IDENT(o) \
@@ -140,6 +145,10 @@ void tokenize(const char *code, size_t len) {
         } break;
         case '%': {
             VEC_ADD(&vm.program, OP_MOD);
+            cursor++;
+        } break;
+        case '<': {
+            VEC_ADD(&vm.program, OP_LT);
             cursor++;
         } break;
         case '?': {
@@ -230,6 +239,12 @@ void interpet() {
             int top = stack[--vm.ip];
             int t2 = stack[--vm.ip];
             stack[vm.ip++] = top % t2;
+            i++;
+        } break;
+        case OPT_LT: {
+            int top = stack[--vm.ip];
+            int t2 = stack[--vm.ip];
+            stack[vm.ip++] = top < t2;
             i++;
         } break;
         case OPT_IDENT: {

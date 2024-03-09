@@ -15,4 +15,5 @@
 | * | mult | t = t * ut |
 | / | plus | t = t / ut |
 | % | mod | t = t % ut |
+| < | less than | t = t < ut |
 | sout | print | out(t); sp-- |
