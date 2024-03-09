@@ -16,6 +16,7 @@ typedef enum {
     OPT_DIV,
     OPT_MOD,
     OPT_LT,
+    OPT_GT,
     OPT_LIT_NUMBER,
     OPT_IDENT,
     OPT_DUMP,
@@ -38,6 +39,8 @@ char *optypeCStr(OPType op) {
         return "OPT_MOD";
     case OPT_LT:
         return "OPT_LT";
+    case OPT_GT:
+        return "OPT_GT";
     case OPT_LIT_NUMBER:
         return "OPT_LIT_NUMBER";
     case OPT_IDENT:
@@ -74,6 +77,8 @@ typedef struct {
     (OP) { .type = OPT_MOD }
 #define OP_LT \
     (OP) { .type = OPT_LT }
+#define OP_GT \
+    (OP) { .type = OPT_GT }
 #define OP_LIT_NUMBER(o) \
     (OP) { .type = OPT_LIT_NUMBER, .op = o }
 #define OP_IDENT(o) \
@@ -86,6 +91,12 @@ typedef struct {
     (OP) { .type = OPT_DROP }
 #define OP_SWAP \
     (OP) { .type = OPT_SWAP }
+
+#define SOUT 0
+#define LOOP 1
+#define END 2
+#define DO 3
+#define PUTC 4
 
 typedef struct {
     OP *data;
@@ -159,6 +170,10 @@ void tokenize(const char *code, size_t len) {
             VEC_ADD(&vm.program, OP_LT);
             cursor++;
         } break;
+        case '>': {
+            VEC_ADD(&vm.program, OP_GT);
+            cursor++;
+        } break;
         case '?': {
             VEC_ADD(&vm.program, OP_DUMP);
             cursor++;
@@ -191,7 +206,15 @@ void tokenize(const char *code, size_t len) {
                 cursor = parseIdent(code, cursor, &tmp);
 
                 if (strncmp("sout", tmp.str, 4) == 0) {
-                    VEC_ADD(&vm.program, OP_IDENT(0));
+                    VEC_ADD(&vm.program, OP_IDENT(SOUT));
+                } else if (strncmp("loop", tmp.str, 4) == 0) {
+                    VEC_ADD(&vm.program, OP_IDENT(LOOP));
+                } else if (strncmp("end", tmp.str, 3) == 0) {
+                    VEC_ADD(&vm.program, OP_IDENT(END));
+                } else if (strncmp("do", tmp.str, 2) == 0) {
+                    VEC_ADD(&vm.program, OP_IDENT(DO));
+                } else if (strncmp("putc", tmp.str, 4) == 0) {
+                    VEC_ADD(&vm.program, OP_IDENT(PUTC));
                 } else {
                     printf("Ident not handled! %s\n", tmp.str);
                     exit(1);
@@ -211,10 +234,18 @@ void tokenize(const char *code, size_t len) {
 
 #define MAX_STACK 100
 
+typedef struct {
+    int *data;
+    int cnt;
+    int cap;
+} dos;
+
 void interpet() {
 
     int sp = 0;
     int stack[MAX_STACK] = {0};
+
+    dos d = {0};
 
     while (vm.program.data[vm.ip].type != OPT_NOP) {
         OP op = vm.program.data[vm.ip];
@@ -260,11 +291,50 @@ void interpet() {
             stack[sp++] = top < t2;
             vm.ip++;
         } break;
+        case OPT_GT: {
+            int top = stack[--sp];
+            int t2 = stack[--sp];
+            stack[sp++] = top > t2;
+            vm.ip++;
+        } break;
         case OPT_IDENT: {
-            if (op.op == 0) {
-                // sout
-                printf("%d\n", stack[--sp]);
+            if (op.op == SOUT) {
+                printf("%d", stack[--sp]);
                 vm.ip++;
+            } else if (op.op == PUTC) {
+                printf("%c", stack[--sp]);
+                vm.ip++;
+            } else if (op.op == LOOP) {
+                int end = vm.ip;
+                while (true) {
+                    if (vm.program.data[end].type == OPT_IDENT && vm.program.data[end].op == 2)
+                        break;
+                    end++;
+                }
+
+                int top = stack[--sp];
+                if (top)
+                    vm.ip++;
+                else
+                    vm.ip = end + 1;
+            } else if (op.op == END) {
+                if (d.cnt != 0) {
+                    vm.ip = d.data[--d.cnt];
+                } else
+                    vm.ip++;
+            } else if (op.op == DO) {
+                if (stack[sp - 1] != 0) {
+                    VEC_ADD(&d, vm.ip);
+                    vm.ip++;
+                } else {
+                    int end = vm.ip;
+                    while (true) {
+                        if (vm.program.data[end].type == OPT_IDENT && vm.program.data[end].op == 2)
+                            break;
+                        end++;
+                    }
+                    vm.ip = end + 1;
+                }
             } else {
                 printf("Unhandled intrinsic %d\n", op.op);
                 exit(1);
@@ -299,6 +369,8 @@ void interpet() {
             exit(1);
         }
     }
+
+    VEC_FREE(d);
 }
 
 int main(int argc, char **argv) {
@@ -315,7 +387,7 @@ int main(int argc, char **argv) {
     tokenize(code, len);
 
     for (int i = 0; i < vm.program.cnt; i++) {
-        printf("OP: %s\n", optypeCStr(vm.program.data[i].type));
+        printf("[%d] OP: %s\n", i, optypeCStr(vm.program.data[i].type));
         printf("OP operand: %d\n", vm.program.data[i].op);
     }
 
