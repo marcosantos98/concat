@@ -12,6 +12,8 @@ typedef enum {
     OPT_PLUS,
     OPT_MINUS,
     OPT_MULT,
+    OPT_DIV,
+    OPT_MOD,
     OPT_LIT_NUMBER,
     OPT_IDENT,
     OPT_DUMP,
@@ -25,6 +27,10 @@ char *optypeCStr(OPType op) {
         return "OPT_MINUS";
     case OPT_MULT:
         return "OPT_MULT";
+    case OPT_DIV:
+        return "OPT_DIV";
+    case OPT_MOD:
+        return "OPT_MOD";
     case OPT_LIT_NUMBER:
         return "OPT_LIT_NUMBER";
     case OPT_IDENT:
@@ -47,6 +53,10 @@ typedef struct {
     (OP) { .type = OPT_MINUS }
 #define OP_MULT \
     (OP) { .type = OPT_MULT }
+#define OP_DIV \
+    (OP) { .type = OPT_DIV }
+#define OP_MOD \
+    (OP) { .type = OPT_MOD }
 #define OP_LIT_NUMBER(o) \
     (OP) { .type = OPT_LIT_NUMBER, .op = o }
 #define OP_IDENT(o) \
@@ -112,6 +122,14 @@ void tokenize(const char *code, size_t len) {
         } break;
         case '*': {
             VEC_ADD(&vm.program, OP_MULT);
+            cursor++;
+        } break;
+        case '/': {
+            VEC_ADD(&vm.program, OP_DIV);
+            cursor++;
+        } break;
+        case '%': {
+            VEC_ADD(&vm.program, OP_MOD);
             cursor++;
         } break;
         case '?': {
@@ -183,6 +201,19 @@ void interpet() {
             stack[vm.ip++] = top * t2;
             i++;
         } break;
+        case OPT_DIV: {
+            int top = stack[--vm.ip];
+            int t2 = stack[--vm.ip];
+            // TODO: Check for division by zero
+            stack[vm.ip++] = top / t2;
+            i++;
+        } break;
+        case OPT_MOD: {
+            int top = stack[--vm.ip];
+            int t2 = stack[--vm.ip];
+            stack[vm.ip++] = top % t2;
+            i++;
+        } break;
         case OPT_IDENT: {
             if (op.op == 0) {
                 // sout
@@ -194,9 +225,11 @@ void interpet() {
             }
         } break;
         case OPT_DUMP: {
+            printf("> Stack Dump:\n");
             for (int j = 0; j < vm.ip; j++) {
                 printf("[%d] %d\n", j, stack[j]);
             }
+            printf("< End Stack Dump.\n");
             i++;
         } break;
         default:
