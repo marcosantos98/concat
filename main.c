@@ -17,6 +17,8 @@ typedef enum {
     OPT_LIT_NUMBER,
     OPT_IDENT,
     OPT_DUMP,
+    OPT_DUP,
+    OPT_DROP,
 } OPType;
 
 char *optypeCStr(OPType op) {
@@ -37,6 +39,10 @@ char *optypeCStr(OPType op) {
         return "OPT_IDENT";
     case OPT_DUMP:
         return "OPT_DUMP";
+    case OPT_DUP:
+        return "OPT_DUP";
+    case OPT_DROP:
+        return "OPT_DROP";
     default:
         return "Unknown type";
     }
@@ -63,6 +69,10 @@ typedef struct {
     (OP) { .type = OPT_IDENT, .op = o }
 #define OP_DUMP \
     (OP) { .type = OPT_DUMP }
+#define OP_DUP \
+    (OP) { .type = OPT_DUP }
+#define OP_DROP \
+    (OP) { .type = OPT_DROP }
 
 typedef struct {
     OP *data;
@@ -134,6 +144,14 @@ void tokenize(const char *code, size_t len) {
         } break;
         case '?': {
             VEC_ADD(&vm.program, OP_DUMP);
+            cursor++;
+        } break;
+        case '.': {
+            VEC_ADD(&vm.program, OP_DUP);
+            cursor++;
+        } break;
+        case ',': {
+            VEC_ADD(&vm.program, OP_DROP);
             cursor++;
         } break;
         case ' ':
@@ -230,6 +248,15 @@ void interpet() {
                 printf("[%d] %d\n", j, stack[j]);
             }
             printf("< End Stack Dump.\n");
+            i++;
+        } break;
+        case OPT_DUP: {
+            stack[vm.ip] = stack[vm.ip - 1];
+            vm.ip++;
+            i++;
+        } break;
+        case OPT_DROP: {
+            vm.ip--;
             i++;
         } break;
         default:
