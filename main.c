@@ -21,6 +21,7 @@ typedef enum {
     OPT_DUMP,
     OPT_DUP,
     OPT_DROP,
+    OPT_SWAP,
 } OPType;
 
 char *optypeCStr(OPType op) {
@@ -47,6 +48,8 @@ char *optypeCStr(OPType op) {
         return "OPT_DUP";
     case OPT_DROP:
         return "OPT_DROP";
+    case OPT_SWAP:
+        return "OPT_SWAP";
     default:
         return "Unknown type";
     }
@@ -81,6 +84,8 @@ typedef struct {
     (OP) { .type = OPT_DUP }
 #define OP_DROP \
     (OP) { .type = OPT_DROP }
+#define OP_SWAP \
+    (OP) { .type = OPT_SWAP }
 
 typedef struct {
     OP *data;
@@ -164,6 +169,10 @@ void tokenize(const char *code, size_t len) {
         } break;
         case ',': {
             VEC_ADD(&vm.program, OP_DROP);
+            cursor++;
+        } break;
+        case ';': {
+            VEC_ADD(&vm.program, OP_SWAP);
             cursor++;
         } break;
         case ' ':
@@ -276,6 +285,13 @@ void interpet() {
         } break;
         case OPT_DROP: {
             sp--;
+            vm.ip++;
+        } break;
+        case OPT_SWAP: {
+            int top = stack[--sp];
+            int t2 = stack[--sp];
+            stack[sp++] = top;
+            stack[sp++] = t2;
             vm.ip++;
         } break;
         default:

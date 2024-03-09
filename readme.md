@@ -10,6 +10,7 @@
 | --- | --- | --- |
 | . | dup | t = ut |
 | , | drop | sp-- |
+| ; | swap | t = ut; ut = t |
 | + | plus | t = t + ut |
 | - | minus | t = t - ut |
 | * | mult | t = t * ut |
