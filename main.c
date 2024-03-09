@@ -9,6 +9,7 @@
 #define _ (void)
 
 typedef enum {
+    OPT_NOP = 0,
     OPT_PLUS,
     OPT_MINUS,
     OPT_MULT,
@@ -56,6 +57,8 @@ typedef struct {
     int op;
 } OP;
 
+#define OP_NOP \
+    (OP) { .type = OPT_NOP }
 #define OP_PLUS \
     (OP) { .type = OPT_PLUS }
 #define OP_MINUS \
@@ -193,65 +196,66 @@ void tokenize(const char *code, size_t len) {
         }
         }
     }
+
+    VEC_ADD(&vm.program, OP_NOP);
 }
 
 #define MAX_STACK 100
 
 void interpet() {
 
-    int i = 0;
-
+    int sp = 0;
     int stack[MAX_STACK] = {0};
 
-    while (i < vm.program.cnt) {
-        OP op = vm.program.data[i];
+    while (vm.program.data[vm.ip].type != OPT_NOP) {
+        OP op = vm.program.data[vm.ip];
         switch (op.type) {
         case OPT_LIT_NUMBER: {
-            stack[vm.ip++] = op.op;
-            i++;
+            stack[sp++] = op.op;
+            vm.ip++;
         } break;
         case OPT_PLUS: {
-            int top = stack[--vm.ip];
-            int t2 = stack[--vm.ip];
-            stack[vm.ip++] = top + t2;
-            i++;
+            int top = stack[--sp];
+            int t2 = stack[--sp];
+            stack[sp++] = top + t2;
+            vm.ip++;
         } break;
         case OPT_MINUS: {
-            int top = stack[--vm.ip];
-            int t2 = stack[--vm.ip];
-            stack[vm.ip++] = top - t2;
-            i++;
+            int top = stack[--sp];
+            int t2 = stack[--sp];
+            stack[sp++] = top - t2;
+            vm.ip++;
         } break;
         case OPT_MULT: {
-            int top = stack[--vm.ip];
-            int t2 = stack[--vm.ip];
-            stack[vm.ip++] = top * t2;
-            i++;
+            int top = stack[--sp];
+            int t2 = stack[--sp];
+            stack[sp++] = top * t2;
+            vm.ip++;
         } break;
         case OPT_DIV: {
-            int top = stack[--vm.ip];
-            int t2 = stack[--vm.ip];
+            int top = stack[--sp];
+            int t2 = stack[--sp];
             // TODO: Check for division by zero
-            stack[vm.ip++] = top / t2;
-            i++;
+            stack[sp++] = top / t2;
+            vm.ip++;
         } break;
         case OPT_MOD: {
-            int top = stack[--vm.ip];
-            int t2 = stack[--vm.ip];
-            stack[vm.ip++] = top % t2;
-            i++;
+            int top = stack[--sp];
+            int t2 = stack[--sp];
+            stack[sp++] = top % t2;
+            vm.ip++;
         } break;
         case OPT_LT: {
-            int top = stack[--vm.ip];
-            int t2 = stack[--vm.ip];
-            stack[vm.ip++] = top < t2;
-            i++;
+            int top = stack[--sp];
+            int t2 = stack[--sp];
+            stack[sp++] = top < t2;
+            vm.ip++;
         } break;
         case OPT_IDENT: {
             if (op.op == 0) {
                 // sout
-                printf("%d\n", stack[--vm.ip]);
-                i++;
+                printf("%d\n", stack[--sp]);
+                vm.ip++;
             } else {
                 printf("Unhandled intrinsic %d\n", op.op);
                 exit(1);
@@ -259,20 +263,20 @@ void interpet() {
         } break;
         case OPT_DUMP: {
             printf("> Stack Dump:\n");
-            for (int j = 0; j < vm.ip; j++) {
+            for (int j = 0; j < sp; j++) {
                 printf("[%d] %d\n", j, stack[j]);
             }
             printf("< End Stack Dump.\n");
-            i++;
+            vm.ip++;
         } break;
         case OPT_DUP: {
-            stack[vm.ip] = stack[vm.ip - 1];
+            stack[sp] = stack[sp - 1];
+            sp++;
             vm.ip++;
-            i++;
         } break;
         case OPT_DROP: {
-            vm.ip--;
-            i++;
+            sp--;
+            vm.ip++;
         } break;
         default:
             printf("Unhandled op %s\n", optypeCStr(op.type));
