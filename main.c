@@ -139,6 +139,13 @@ size_t parseIdent(const char *code, size_t cursor, strb *s) {
     return end;
 }
 
+size_t parseComment(const char *code, size_t cursor) {
+    size_t end = cursor;
+    while (code[end] != 10)
+        end++;
+    return end;
+}
+
 void tokenize(const char *code, size_t len) {
     size_t cursor = 0;
 
@@ -159,8 +166,12 @@ void tokenize(const char *code, size_t len) {
             cursor++;
         } break;
         case '/': {
-            VEC_ADD(&vm.program, OP_DIV);
-            cursor++;
+            if (code[cursor + 1] == '/') {
+                cursor = parseComment(code, cursor);
+            } else {
+                VEC_ADD(&vm.program, OP_DIV);
+                cursor++;
+            }
         } break;
         case '%': {
             VEC_ADD(&vm.program, OP_MOD);
