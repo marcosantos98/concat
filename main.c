@@ -18,6 +18,7 @@ typedef enum {
     OPT_LT,
     OPT_GT,
     OPT_LIT_NUMBER,
+    OPT_LIT_STR,
     OPT_IDENT,
     OPT_DUMP,
     OPT_DUP,
@@ -43,6 +44,8 @@ char *optypeCStr(OPType op) {
         return "OPT_GT";
     case OPT_LIT_NUMBER:
         return "OPT_LIT_NUMBER";
+    case OPT_LIT_STR:
+        return "OPT_LIT_STR";
     case OPT_IDENT:
         return "OPT_IDENT";
     case OPT_DUMP:
@@ -57,6 +60,17 @@ char *optypeCStr(OPType op) {
         return "Unknown type";
     }
 }
+
+typedef struct {
+    char *cstr;
+    size_t len;
+} String;
+
+typedef struct {
+    String *data;
+    int cnt;
+    int cap;
+} Strings;
 
 typedef struct {
     OPType type;
@@ -81,6 +95,8 @@ typedef struct {
     (OP) { .type = OPT_GT }
 #define OP_LIT_NUMBER(o) \
     (OP) { .type = OPT_LIT_NUMBER, .op = o }
+#define OP_LIT_STR(sIdx) \
+    (OP) { .type = OPT_LIT_STR, .op = sIdx }
 #define OP_IDENT(o) \
     (OP) { .type = OPT_IDENT, .op = o }
 #define OP_DUMP \
@@ -97,6 +113,8 @@ typedef struct {
 #define END 2
 #define DO 3
 #define PUTC 4
+#define PRINTLN 5
+#define PRINT 6
 
 typedef struct {
     OP *data;
@@ -110,6 +128,7 @@ typedef struct {
 } VM;
 
 static VM vm = {0};
+static Strings stringTable = {0};
 
 size_t parseLiteralNumber(const char *code, size_t cursor, strb *s) {
 
@@ -146,6 +165,22 @@ size_t parseComment(const char *code, size_t cursor) {
     return end;
 }
 
+size_t parseStr(const char *code, size_t *cursor, strb *s) {
+    size_t start = *cursor;
+    size_t end = *cursor;
+    end++;
+    while (code[end] != '"') {
+        strb_append_single(s, code[end]);
+        end++;
+    }
+
+    end++; // close "
+
+    *cursor = end;
+
+    return end - start;
+}
+
 void tokenize(const char *code, size_t len) {
     size_t cursor = 0;
 
@@ -153,6 +188,16 @@ void tokenize(const char *code, size_t len) {
 
     while (cursor < len) {
         switch (code[cursor]) {
+        case '"': {
+            String s = {0};
+            s.len = parseStr(code, &cursor, &tmp);
+            s.cstr = malloc(sizeof(char) * s.len);
+            memcpy(s.cstr, tmp.str, s.len);
+            printf("Parsed string %s with %zu chars\n", s.cstr, s.len);
+            tmp.cnt = 0;
+            VEC_ADD(&stringTable, s);
+            VEC_ADD(&vm.program, OP_LIT_STR(stringTable.cnt - 1));
+        } break;
         case '+': {
             VEC_ADD(&vm.program, OP_PLUS);
             cursor++;
@@ -226,6 +271,10 @@ void tokenize(const char *code, size_t len) {
                     VEC_ADD(&vm.program, OP_IDENT(DO));
                 } else if (strncmp("putc", tmp.str, 4) == 0) {
                     VEC_ADD(&vm.program, OP_IDENT(PUTC));
+                } else if (strncmp("println", tmp.str, 7) == 0) {
+                    VEC_ADD(&vm.program, OP_IDENT(PRINTLN));
+                } else if (strncmp("print", tmp.str, 5) == 0) {
+                    VEC_ADD(&vm.program, OP_IDENT(PRINT));
                 } else {
                     printf("Ident not handled! %s\n", tmp.str);
                     exit(1);
@@ -241,6 +290,7 @@ void tokenize(const char *code, size_t len) {
     }
 
     VEC_ADD(&vm.program, OP_NOP);
+    strb_free(tmp);
 }
 
 #define MAX_STACK 100
@@ -261,7 +311,8 @@ void interpet() {
     while (vm.program.data[vm.ip].type != OPT_NOP) {
         OP op = vm.program.data[vm.ip];
         switch (op.type) {
-        case OPT_LIT_NUMBER: {
+        case OPT_LIT_NUMBER:
+        case OPT_LIT_STR: {
             stack[sp++] = op.op;
             vm.ip++;
         } break;
@@ -346,6 +397,14 @@ void interpet() {
                     }
                     vm.ip = end + 1;
                 }
+            } else if (op.op == PRINTLN || op.op == PRINT) {
+                // TODO: Check existance of string in table
+                int strIdx = stack[--sp];
+                if (op.op == PRINTLN)
+                    printf("%s\n", stringTable.data[strIdx].cstr);
+                else
+                    printf("%s", stringTable.data[strIdx].cstr);
+                vm.ip++;
             } else {
                 printf("Unhandled intrinsic %d\n", op.op);
                 exit(1);
@@ -395,6 +454,9 @@ int main(int argc, char **argv) {
 
     size_t len;
     char *code = read_file(path, &len);
+    if (code == NULL)
+        return 1;
+
     tokenize(code, len);
 
     for (int i = 0; i < vm.program.cnt; i++) {
@@ -407,6 +469,12 @@ int main(int argc, char **argv) {
 
     free(code);
     VEC_FREE(vm.program);
+
+    for (int i = 0; i < stringTable.cnt; i++) {
+        free(stringTable.data[i].cstr);
+    }
+
+    VEC_FREE(stringTable);
 
     return 0;
 }
