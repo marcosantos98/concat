@@ -24,6 +24,8 @@ typedef enum {
     OPT_DUP,
     OPT_DROP,
     OPT_SWAP,
+    OPT_STASH,
+    OPT_POP,
 } OPType;
 
 char *optypeCStr(OPType op) {
@@ -56,6 +58,10 @@ char *optypeCStr(OPType op) {
         return "OPT_DROP";
     case OPT_SWAP:
         return "OPT_SWAP";
+    case OPT_STASH:
+        return "OPT_STASH";
+    case OPT_POP:
+        return "OPT_POP";
     default:
         return "Unknown type";
     }
@@ -107,6 +113,10 @@ typedef struct {
     (OP) { .type = OPT_DROP }
 #define OP_SWAP \
     (OP) { .type = OPT_SWAP }
+#define OP_STASH \
+    (OP) { .type = OPT_STASH }
+#define OP_POP \
+    (OP) { .type = OPT_POP }
 
 #define SOUT 0
 #define LOOP 1
@@ -203,8 +213,13 @@ void tokenize(const char *code, size_t len) {
             cursor++;
         } break;
         case '-': {
-            VEC_ADD(&vm.program, OP_MINUS);
-            cursor++;
+            if (code[cursor + 1] == '>') {
+                VEC_ADD(&vm.program, OP_POP);
+                cursor += 2;
+            } else {
+                VEC_ADD(&vm.program, OP_MINUS);
+                cursor++;
+            }
         } break;
         case '*': {
             VEC_ADD(&vm.program, OP_MULT);
@@ -223,8 +238,13 @@ void tokenize(const char *code, size_t len) {
             cursor++;
         } break;
         case '<': {
-            VEC_ADD(&vm.program, OP_LT);
-            cursor++;
+            if (code[cursor + 1] == '-') {
+                VEC_ADD(&vm.program, OP_STASH);
+                cursor += 2;
+            } else {
+                VEC_ADD(&vm.program, OP_LT);
+                cursor++;
+            }
         } break;
         case '>': {
             VEC_ADD(&vm.program, OP_GT);
@@ -305,6 +325,8 @@ void interpet() {
 
     int sp = 0;
     int stack[MAX_STACK] = {0};
+    int bsp = 0;
+    int backStack[MAX_STACK] = {0};
 
     dos d = {0};
 
@@ -432,6 +454,18 @@ void interpet() {
             int t2 = stack[--sp];
             stack[sp++] = top;
             stack[sp++] = t2;
+            vm.ip++;
+        } break;
+        case OPT_STASH: {
+            int top = stack[--sp];
+            for (int n = 0; n < top; n++)
+                backStack[bsp++] = stack[--sp];
+            vm.ip++;
+        } break;
+        case OPT_POP: {
+            int top = stack[--sp];
+            for (int n = 0; n < top; n++)
+                stack[sp++] = backStack[--bsp];
             vm.ip++;
         } break;
         default:

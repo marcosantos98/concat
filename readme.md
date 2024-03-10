@@ -5,6 +5,7 @@
 - t: value on the top of the stack
 - ut: value under the top
 - sp: stack pointer
+- bst: value on the top of the back stack
 
 | Syntax | Job | Stack manipulation | Consume n |
 | --- | --- | --- | --- |
@@ -14,6 +15,8 @@
 | . | dup | t = ut | 0 |
 | , | drop | sp-- | 1 |
 | ; | swap | t = ut; ut = t | 0 |
+| <- | stash n elements in back stack | for n in stack: bst = t;| n |
+| -> | pop n elements from back stack | for n in backStack: t = bst | n |
 | + | plus | t = t + ut | 2 |
 | - | minus | t = t - ut | 2 |
 | * | mult | t = t * ut | 2 |
