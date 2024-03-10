@@ -1,0 +1,57 @@
+[0] OP: OPT_LIT_NUMBER
+OP operand: 1
+[1] OP: OPT_LIT_NUMBER
+OP operand: 1
+[2] OP: OPT_STASH
+OP operand: 0
+[3] OP: OPT_LIT_NUMBER
+OP operand: 2
+[4] OP: OPT_DUP
+OP operand: 0
+[5] OP: OPT_IDENT
+OP operand: 0
+[6] OP: OPT_LIT_NUMBER
+OP operand: 10
+[7] OP: OPT_IDENT
+OP operand: 4
+[8] OP: OPT_DROP
+OP operand: 0
+[9] OP: OPT_LIT_NUMBER
+OP operand: 1
+[10] OP: OPT_LIT_NUMBER
+OP operand: 2
+[11] OP: OPT_DUMP
+OP operand: 0
+[12] OP: OPT_SWAP
+OP operand: 0
+[13] OP: OPT_DUMP
+OP operand: 0
+[14] OP: OPT_DROP
+OP operand: 0
+[15] OP: OPT_DROP
+OP operand: 0
+[16] OP: OPT_DUMP
+OP operand: 0
+[17] OP: OPT_LIT_NUMBER
+OP operand: 1
+[18] OP: OPT_POP
+OP operand: 0
+[19] OP: OPT_DUMP
+OP operand: 0
+[20] OP: Unknown type
+OP operand: 0
+================================
+2
+> Stack Dump:
+[0] 1
+[1] 2
+< End Stack Dump.
+> Stack Dump:
+[0] 2
+[1] 1
+< End Stack Dump.
+> Stack Dump:
+< End Stack Dump.
+> Stack Dump:
+[0] 1
+< End Stack Dump.

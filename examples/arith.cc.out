@@ -1,0 +1,72 @@
+[0] OP: OPT_LIT_NUMBER
+OP operand: 1
+[1] OP: OPT_LIT_NUMBER
+OP operand: 2
+[2] OP: OPT_PLUS
+OP operand: 0
+[3] OP: OPT_IDENT
+OP operand: 0
+[4] OP: OPT_LIT_NUMBER
+OP operand: 10
+[5] OP: OPT_IDENT
+OP operand: 4
+[6] OP: OPT_LIT_NUMBER
+OP operand: 3
+[7] OP: OPT_LIT_NUMBER
+OP operand: 3
+[8] OP: OPT_MINUS
+OP operand: 0
+[9] OP: OPT_IDENT
+OP operand: 0
+[10] OP: OPT_LIT_NUMBER
+OP operand: 10
+[11] OP: OPT_IDENT
+OP operand: 4
+[12] OP: OPT_LIT_NUMBER
+OP operand: 34
+[13] OP: OPT_LIT_NUMBER
+OP operand: 2
+[14] OP: OPT_MULT
+OP operand: 0
+[15] OP: OPT_LIT_NUMBER
+OP operand: 1
+[16] OP: OPT_PLUS
+OP operand: 0
+[17] OP: OPT_IDENT
+OP operand: 0
+[18] OP: OPT_LIT_NUMBER
+OP operand: 10
+[19] OP: OPT_IDENT
+OP operand: 4
+[20] OP: OPT_LIT_NUMBER
+OP operand: 2
+[21] OP: OPT_LIT_NUMBER
+OP operand: 10
+[22] OP: OPT_DIV
+OP operand: 0
+[23] OP: OPT_IDENT
+OP operand: 0
+[24] OP: OPT_LIT_NUMBER
+OP operand: 10
+[25] OP: OPT_IDENT
+OP operand: 4
+[26] OP: OPT_LIT_NUMBER
+OP operand: 3
+[27] OP: OPT_LIT_NUMBER
+OP operand: 3
+[28] OP: OPT_MOD
+OP operand: 0
+[29] OP: OPT_IDENT
+OP operand: 0
+[30] OP: OPT_LIT_NUMBER
+OP operand: 10
+[31] OP: OPT_IDENT
+OP operand: 4
+[32] OP: Unknown type
+OP operand: 0
+================================
+3
+0
+69
+5
+0

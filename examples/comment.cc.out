@@ -1,0 +1,12 @@
+[0] OP: OPT_LIT_NUMBER
+OP operand: 10
+[1] OP: OPT_IDENT
+OP operand: 0
+[2] OP: OPT_LIT_NUMBER
+OP operand: 10
+[3] OP: OPT_IDENT
+OP operand: 4
+[4] OP: Unknown type
+OP operand: 0
+================================
+10

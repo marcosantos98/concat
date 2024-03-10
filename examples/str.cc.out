@@ -1,0 +1,9 @@
+Parsed string Hello, World with 14 chars
+[0] OP: OPT_LIT_STR
+OP operand: 0
+[1] OP: OPT_IDENT
+OP operand: 5
+[2] OP: Unknown type
+OP operand: 0
+================================
+Hello, World

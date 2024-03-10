@@ -1,0 +1,41 @@
+[0] OP: OPT_LIT_NUMBER
+OP operand: 10
+[1] OP: OPT_IDENT
+OP operand: 3
+[2] OP: OPT_DUP
+OP operand: 0
+[3] OP: OPT_LIT_NUMBER
+OP operand: 0
+[4] OP: OPT_LT
+OP operand: 0
+[5] OP: OPT_IDENT
+OP operand: 1
+[6] OP: OPT_DUP
+OP operand: 0
+[7] OP: OPT_IDENT
+OP operand: 0
+[8] OP: OPT_LIT_NUMBER
+OP operand: 10
+[9] OP: OPT_IDENT
+OP operand: 4
+[10] OP: OPT_LIT_NUMBER
+OP operand: 1
+[11] OP: OPT_SWAP
+OP operand: 0
+[12] OP: OPT_MINUS
+OP operand: 0
+[13] OP: OPT_IDENT
+OP operand: 2
+[14] OP: Unknown type
+OP operand: 0
+================================
+10
+9
+8
+7
+6
+5
+4
+3
+2
+1
