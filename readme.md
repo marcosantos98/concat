@@ -6,15 +6,20 @@
 - ut: value under the top
 - sp: stack pointer
 
-| Syntax | Job | Stack manipulation |
-| --- | --- | --- |
-| . | dup | t = ut |
-| , | drop | sp-- |
-| ; | swap | t = ut; ut = t |
-| + | plus | t = t + ut |
-| - | minus | t = t - ut |
-| * | mult | t = t * ut |
-| / | plus | t = t / ut |
-| % | mod | t = t % ut |
-| < | less than | t = t < ut |
-| sout | print | out(t); sp-- |
+| Syntax | Job | Stack manipulation | Consume n |
+| --- | --- | --- | --- |
+| . | dup | t = ut | 0
+| , | drop | sp-- | 1 |
+| ; | swap | t = ut; ut = t | 0 |
+| + | plus | t = t + ut | 2 |
+| - | minus | t = t - ut | 2 |
+| * | mult | t = t * ut | 2 |
+| / | plus | t = t / ut | 2 |
+| % | mod | t = t % ut | 2 |
+| < | less than | t = t < ut | 2 |
+| > | greater than | t = t > ut | 2 |
+| sout | print | out(t); sp-- | 1 |
+| do | start loop | t != 0 | 0 |
+| loop | check loop condition | t == 1 | 1 | 
+| end | end body | - | 0 |
+| putc | print char | out(t); sp-- | 1 |
