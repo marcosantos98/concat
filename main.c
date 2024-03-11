@@ -22,6 +22,7 @@ typedef enum {
     OPT_IDENT,
     OPT_DUMP,
     OPT_DUP,
+    OPT_2DUP,
     OPT_DROP,
     OPT_SWAP,
     OPT_STASH,
@@ -54,6 +55,8 @@ char *optypeCStr(OPType op) {
         return "OPT_DUMP";
     case OPT_DUP:
         return "OPT_DUP";
+    case OPT_2DUP:
+        return "OPT_2DUP";
     case OPT_DROP:
         return "OPT_DROP";
     case OPT_SWAP:
@@ -109,6 +112,8 @@ typedef struct {
     (OP) { .type = OPT_DUMP }
 #define OP_DUP \
     (OP) { .type = OPT_DUP }
+#define OP_2DUP \
+    (OP) { .type = OPT_2DUP }
 #define OP_DROP \
     (OP) { .type = OPT_DROP }
 #define OP_SWAP \
@@ -256,6 +261,10 @@ void tokenize(const char *code, size_t len) {
         } break;
         case '.': {
             VEC_ADD(&vm.program, OP_DUP);
+            cursor++;
+        } break;
+        case ':': {
+            VEC_ADD(&vm.program, OP_2DUP);
             cursor++;
         } break;
         case ',': {
@@ -443,6 +452,12 @@ void interpet() {
         case OPT_DUP: {
             stack[sp] = stack[sp - 1];
             sp++;
+            vm.ip++;
+        } break;
+        case OPT_2DUP: {
+            stack[sp] = stack[sp - 2];
+            stack[sp + 1] = stack[sp - 1];
+            sp += 2;
             vm.ip++;
         } break;
         case OPT_DROP: {

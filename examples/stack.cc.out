@@ -38,7 +38,15 @@ OP operand: 1
 OP operand: 0
 [19] OP: OPT_DUMP
 OP operand: 0
-[20] OP: Unknown type
+[20] OP: OPT_LIT_NUMBER
+OP operand: 2
+[21] OP: OPT_DUMP
+OP operand: 0
+[22] OP: OPT_2DUP
+OP operand: 0
+[23] OP: OPT_DUMP
+OP operand: 0
+[24] OP: Unknown type
 OP operand: 0
 ================================
 2
@@ -54,4 +62,14 @@ OP operand: 0
 < End Stack Dump.
 > Stack Dump:
 [0] 1
+< End Stack Dump.
+> Stack Dump:
+[0] 1
+[1] 2
+< End Stack Dump.
+> Stack Dump:
+[0] 1
+[1] 2
+[2] 1
+[3] 2
 < End Stack Dump.

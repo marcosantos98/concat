@@ -13,6 +13,7 @@
 | 0-9 | push number stack | t = value | 0 |
 | "..." | push string to storage and push idx to stack | t = strIdx | 0 |
 | . | dup | t = ut | 0 |
+| : | dup two values | ut = t - 1, t = t | 0 |
 | , | drop | sp-- | 1 |
 | ; | swap | t = ut; ut = t | 0 |
 | <- | stash n elements in back stack | for n in stack: bst = t;| n |
