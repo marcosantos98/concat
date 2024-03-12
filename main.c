@@ -2,9 +2,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <bench.h>
 #include <io.h>
 #include <strb.h>
 #include <vector.h>
+
+#define DEBUG_BENCH 0
+
+#define MEASURE(bPtr, strmsg)            \
+    do {                                 \
+        if (DEBUG_BENCH)                 \
+            BENCH_MEASURE(bPtr, strmsg); \
+    } while (0)
 
 #define _ (void)
 
@@ -506,7 +515,11 @@ int main(int argc, char **argv) {
     if (code == NULL)
         return 1;
 
+    bench b = {0};
+    BENCH_START(&b);
+
     tokenize(code, len);
+    MEASURE(&b, "Tokenize");
 
     for (int i = 0; i < vm.program.cnt; i++) {
         printf("[%d] OP: %s\n", i, optypeCStr(vm.program.data[i].type));
@@ -514,7 +527,10 @@ int main(int argc, char **argv) {
     }
 
     printf("================================\n");
+
+    BENCH_START(&b);
     interpet();
+    MEASURE(&b, "Interpet");
 
     free(code);
     VEC_FREE(vm.program);
