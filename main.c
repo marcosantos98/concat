@@ -7,11 +7,11 @@
 #include <strb.h>
 #include <vector.h>
 
-#define DEBUG_BENCH 0
+#define DEBUG 0
 
 #define MEASURE(bPtr, strmsg)            \
     do {                                 \
-        if (DEBUG_BENCH)                 \
+        if (DEBUG)                       \
             BENCH_MEASURE(bPtr, strmsg); \
     } while (0)
 
@@ -518,15 +518,17 @@ int main(int argc, char **argv) {
     bench b = {0};
     BENCH_START(&b);
 
-    tokenize(code, len);
+    tokenize(path, code, len);
     MEASURE(&b, "Tokenize");
 
-    for (int i = 0; i < vm.program.cnt; i++) {
-        printf("[%d] OP: %s\n", i, optypeCStr(vm.program.data[i].type));
-        printf("OP operand: %d\n", vm.program.data[i].op);
+    if (DEBUG) {
+        for (int i = 0; i < vm.program.cnt; i++) {
+            printf("[%d] OP: %s\n", i, optypeCStr(vm.program.data[i].type));
+            printf("    > operand: %d\n", vm.program.data[i].op);
+            printf("    > loc: %s:%d:%d\n", vm.program.data[i].loc.path, vm.program.data[i].loc.row, vm.program.data[i].loc.col);
+        }
+        printf("================================\n");
     }
-
-    printf("================================\n");
 
     BENCH_START(&b);
     interpet();
