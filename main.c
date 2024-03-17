@@ -542,47 +542,54 @@ void interpet() {
                 vm.ip++;
             } else if (op.op == LOOP) {
 
+                int doo = vm.ip;
+                while (true) {
+                    if (vm.program.data[doo].type == OPT_IDENT && vm.program.data[doo].op == DO)
+                        break;
+                    else if (vm.program.data[doo].type == OPT_NOP)
+
+                        error(ERR_NO_DO, op, "`do` keyword is required after `loop`.\n");
+                    doo++;
+                }
+
                 VEC_ADD(&d, vm.ip);
                 vm.ip++;
 
-                // if (d.cnt == 0)
-                //     error(ERR_NO_DO, op, "`do` keyword is required before `loop`.\n");
-
-                // int end = vm.ip;
-                // while (true) {
-                //     if (vm.program.data[end].type == OPT_NOP)
-                //         error(ERR_UNCLOSED_LOOP, op, "loop requires an `end` keyword.\n");
-                //     if (vm.program.data[end].type == OPT_IDENT && vm.program.data[end].op == 2)
-                //         break;
-                //     end++;
-                // }
-                // if (sp - 1 < 0)
-                //     error(ERR_UNDERFLOW, op, "`loop` requires at least one value on the stack.\n");
-
-                // int top = stack[--sp];
-                // if (top)
-                //     vm.ip++;
-                // else
-                //     vm.ip = end + 1;
             } else if (op.op == END) {
                 if (d.cnt == 0)
                     error(ERR_NO_DO, op, "`end` doesn't have a jump location.\n");
                 vm.ip = d.data[--d.cnt];
+                // printf("Jumping to %s:%d:%d\n", vm.program.data[vm.ip].loc.path, vm.program.data[vm.ip].loc.row, vm.program.data[vm.ip].loc.col);
             } else if (op.op == DO) {
                 if (sp - 1 < 0)
                     error(ERR_UNDERFLOW, op, "`do` requires at least one value on the stack.\n");
+
+                // TODO: Dont calc this every loop
+                int end = vm.ip + 1;
+                int doCnt = 1;
+                while (doCnt > 0) {
+                    bool isNop = vm.program.data[end].type == OPT_NOP;
+                    if (isNop)
+                        error(ERR_UNCLOSED_LOOP, op, "`do` requires an `end` keyword.\n");
+
+                    bool isEnd = vm.program.data[end].type == OPT_IDENT && vm.program.data[end].op == END;
+                    bool isDo = vm.program.data[end].type == OPT_IDENT && vm.program.data[end].op == DO;
+
+                    if (isDo)
+                        doCnt++;
+                    if (isEnd)
+                        doCnt--;
+                    end++;
+                }
+                // printf("Found end at: %s:%d:%d for do at %s:%d:%d\n",
+                //        vm.program.data[end].loc.path, vm.program.data[end].loc.row, vm.program.data[end].loc.col,
+                //        op.loc.path, op.loc.row, op.loc.col);
 
                 int top = stack[--sp];
                 if (top) {
                     vm.ip++;
                 } else {
-                    int end = vm.ip;
-                    while (true) {
-                        if (vm.program.data[end].type == OPT_IDENT && vm.program.data[end].op == 2)
-                            break;
-                        end++;
-                    }
-                    vm.ip = end + 1;
+                    vm.ip = end;
                     d.cnt--;
                 }
             } else if (op.op == PRINTLN || op.op == PRINT) {
@@ -598,7 +605,6 @@ void interpet() {
                     printf("%.*s\n", (int)stringTable.data[strIdx].len, stringTable.data[strIdx].cstr);
                 else
                     printf("%.*s", (int)stringTable.data[strIdx].len, stringTable.data[strIdx].cstr);
-                stringTable.cnt--;
                 vm.ip++;
             } else {
                 printf("Unhandled intrinsic %d\n", op.op);
@@ -612,6 +618,8 @@ void interpet() {
                 printf("[%d] %d\n", j, stack[j]);
             }
             printf("< End Stack Dump.\n");
+            if (vm.program.data[vm.ip + 1].type == OPT_BDUMP)
+                exit(1);
             vm.ip++;
         } break;
         case OPT_BDUMP: {
@@ -691,8 +699,9 @@ void interpet() {
     }
 
     if (sp != 0) {
+        // TODO: Move this to error() ?
         printf("E: Unhandled data on the stack.\n");
-        for (int i = sp - 1; i > 0; i--) {
+        for (int i = sp - 1; i >= 0; i--) {
             printf("[%d] %d\n", i, stack[i]);
         }
     }
