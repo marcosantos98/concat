@@ -217,7 +217,7 @@ size_t parseStr(const char *code, size_t *cursor, strb *s) {
 
     *cursor = end;
 
-    return end - start;
+    return end - start - 2;
 }
 
 void tokenize(const char *path, const char *code, size_t len) {
