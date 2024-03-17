@@ -1,4 +1,4 @@
-10 do . 0 < loop
+10 loop . 0 < do
 	. sout 10 putc
 	1 ; -
-end
+end ,

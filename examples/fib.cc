@@ -1,6 +1,6 @@
 0 1 // n1, n2
 
-1 do . 20 > loop
+1 loop . 20 > do
 	1 <- // Save i
 	: // dup n1 and n2
 	+ // next f
