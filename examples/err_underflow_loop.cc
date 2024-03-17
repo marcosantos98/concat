@@ -1,1 +1,1 @@
-do loop end
+loop do end
