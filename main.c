@@ -401,12 +401,6 @@ void tokenize(const char *path, const char *code, size_t len) {
 
 #define MAX_STACK 100
 
-typedef struct {
-    int *data;
-    int cnt;
-    int cap;
-} dos;
-
 #include <stdarg.h>
 
 typedef enum {
@@ -443,14 +437,69 @@ void error(ErrorType type, OP op, const char *msg, ...) {
     exit(1);
 }
 
+typedef struct {
+    int loopIp;
+    int doIp;
+    int endIp;
+} loop;
+
+typedef struct {
+    loop *data;
+    int cnt;
+    int cap;
+} loopinfo;
+
+static loopinfo loops = {0};
+
+void controlFlowLink() {
+    int ip = 0;
+
+    while (vm.program.data[ip].type != OPT_NOP) {
+
+        if (vm.program.data[ip].type != OPT_IDENT) {
+            ip++;
+            continue;
+        }
+
+        if (vm.program.data[ip].op == LOOP) {
+            int loopIp = ip;
+            int doIp = -1;
+            int end = ip + 1;
+
+            int loopCnt = 1;
+            while (loopCnt > 0) {
+                if (vm.program.data[end].type == OPT_NOP)
+                    error(ERR_UNCLOSED_LOOP, vm.program.data[end], "`do` requires an `end` keyword.\n");
+
+                if (vm.program.data[end].type == OPT_IDENT && vm.program.data[end].op == DO && doIp == -1)
+                    doIp = end;
+
+                if (vm.program.data[end].type == OPT_IDENT && vm.program.data[end].op == LOOP)
+                    loopCnt++;
+                if (vm.program.data[end].type == OPT_IDENT && vm.program.data[end].op == END) {
+                    loopCnt--;
+                    if (loopCnt == 0)
+                        break;
+                }
+                end++;
+            }
+
+            if (doIp == -1)
+                error(ERR_NO_DO, vm.program.data[loopIp], "`do` keyword not found.\n");
+
+            loop l = (loop){.loopIp = loopIp, .doIp = doIp, .endIp = end};
+            VEC_ADD(&loops, l);
+        }
+        ip++;
+    }
+}
+
 void interpet() {
 
     int sp = 0;
     int stack[MAX_STACK] = {0};
     int bsp = 0;
     int backStack[MAX_STACK] = {0};
-
-    dos d = {0};
 
     while (vm.program.data[vm.ip].type != OPT_NOP) {
         OP op = vm.program.data[vm.ip];
@@ -541,56 +590,31 @@ void interpet() {
                 printf("%c", stack[--sp]);
                 vm.ip++;
             } else if (op.op == LOOP) {
-
-                int doo = vm.ip;
-                while (true) {
-                    if (vm.program.data[doo].type == OPT_IDENT && vm.program.data[doo].op == DO)
-                        break;
-                    else if (vm.program.data[doo].type == OPT_NOP)
-
-                        error(ERR_NO_DO, op, "`do` keyword is required after `loop`.\n");
-                    doo++;
-                }
-
-                VEC_ADD(&d, vm.ip);
                 vm.ip++;
-
             } else if (op.op == END) {
-                if (d.cnt == 0)
-                    error(ERR_NO_DO, op, "`end` doesn't have a jump location.\n");
-                vm.ip = d.data[--d.cnt];
-                // printf("Jumping to %s:%d:%d\n", vm.program.data[vm.ip].loc.path, vm.program.data[vm.ip].loc.row, vm.program.data[vm.ip].loc.col);
+                if (DEBUG)
+                    printf("Jumping to %s:%d:%d\n", vm.program.data[vm.ip].loc.path, vm.program.data[vm.ip].loc.row, vm.program.data[vm.ip].loc.col);
+
+                for (int i = 0; i < loops.cnt; i++) {
+                    if (loops.data[i].endIp == vm.ip) {
+                        vm.ip = loops.data[i].loopIp;
+                        break;
+                    }
+                }
             } else if (op.op == DO) {
                 if (sp - 1 < 0)
                     error(ERR_UNDERFLOW, op, "`do` requires at least one value on the stack.\n");
-
-                // TODO: Dont calc this every loop
-                int end = vm.ip + 1;
-                int doCnt = 1;
-                while (doCnt > 0) {
-                    bool isNop = vm.program.data[end].type == OPT_NOP;
-                    if (isNop)
-                        error(ERR_UNCLOSED_LOOP, op, "`do` requires an `end` keyword.\n");
-
-                    bool isEnd = vm.program.data[end].type == OPT_IDENT && vm.program.data[end].op == END;
-                    bool isDo = vm.program.data[end].type == OPT_IDENT && vm.program.data[end].op == DO;
-
-                    if (isDo)
-                        doCnt++;
-                    if (isEnd)
-                        doCnt--;
-                    end++;
-                }
-                // printf("Found end at: %s:%d:%d for do at %s:%d:%d\n",
-                //        vm.program.data[end].loc.path, vm.program.data[end].loc.row, vm.program.data[end].loc.col,
-                //        op.loc.path, op.loc.row, op.loc.col);
 
                 int top = stack[--sp];
                 if (top) {
                     vm.ip++;
                 } else {
-                    vm.ip = end;
-                    d.cnt--;
+                    for (int i = 0; i < loops.cnt; i++) {
+                        if (loops.data[i].doIp == vm.ip) {
+                            vm.ip = loops.data[i].endIp + 1;
+                            break;
+                        }
+                    }
                 }
             } else if (op.op == PRINTLN || op.op == PRINT) {
                 // TODO: Check existance of string in table
@@ -706,7 +730,7 @@ void interpet() {
         }
     }
 
-    VEC_FREE(d);
+    VEC_FREE(loops);
 }
 
 int main(int argc, char **argv) {
@@ -736,6 +760,16 @@ int main(int argc, char **argv) {
             printf("    > loc: %s:%d:%d\n", vm.program.data[i].loc.path, vm.program.data[i].loc.row, vm.program.data[i].loc.col);
         }
         printf("================================\n");
+    }
+
+    BENCH_START(&b);
+    controlFlowLink();
+    MEASURE(&b, "ControlFlowLink");
+
+    if (DEBUG) {
+        for (int i = 0; i < loops.cnt; i++) {
+            printf("Loop: %d Do: %d End: %d\n", loops.data[i].loopIp, loops.data[i].doIp, loops.data[i].endIp);
+        }
     }
 
     BENCH_START(&b);
