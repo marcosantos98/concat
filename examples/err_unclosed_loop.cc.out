@@ -1,1 +1,1 @@
-E: err_unclosed_loop.cc:1:15: `do` requires an `end` keyword.
+E: err_unclosed_loop.cc:4:1: `do` requires an `end` keyword.
