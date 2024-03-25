@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -84,7 +85,7 @@ char *optypeCStr(OPType op) {
 
 typedef struct {
     char *cstr;
-    size_t len;
+    int len;
 } String;
 
 typedef struct {
@@ -494,12 +495,27 @@ void controlFlowLink() {
     }
 }
 
-void interpet() {
+void interpet(bool gen) {
 
     int sp = 0;
     int stack[MAX_STACK] = {0};
     int bsp = 0;
     int backStack[MAX_STACK] = {0};
+
+    strb data = strb_init(32);
+
+    char snbuf[256];
+    strb_append(&data, "data $putd_fmt = { b \"%d\", b 0 }\n");
+    strb_append(&data, "data $putc_fmt = { b \"%c\", b 0 }\n");
+
+    for (int i = 0; i < stringTable.cnt; i++) {
+        snprintf(snbuf, 256, "data $str_%d = { b \"%.*s\", b 0 }\n", i, stringTable.data[i].len, stringTable.data[i].cstr);
+        strb_append(&data, snbuf);
+    }
+    strb code = strb_init(32);
+
+    strb_append(&code, "export function w $main() {\n");
+    strb_append(&code, "@start\n");
 
     while (vm.program.data[vm.ip].type != OPT_NOP) {
         OP op = vm.program.data[vm.ip];
@@ -581,17 +597,30 @@ void interpet() {
                 if (sp - 1 < 0)
                     error(ERR_UNDERFLOW, op, "`putd` requires at least one value on the stack.\n");
 
-                printf("%d", stack[--sp]);
                 vm.ip++;
+
+                if (gen) {
+                    snprintf(snbuf, 256, "\tcall $printf(l $putd_fmt, ..., w %d)\n", stack[--sp]);
+                    strb_append(&code, snbuf);
+                } else {
+                    printf("%d", stack[--sp]);
+                }
             } else if (op.op == PUTC) {
                 if (sp - 1 < 0)
                     error(ERR_UNDERFLOW, op, "`putc` requires at least one value on the stack.\n");
 
-                printf("%c", stack[--sp]);
+                if (gen) {
+                    snprintf(snbuf, 256, "\tcall $printf(l $putc_fmt, ..., w %d)\n", stack[--sp]);
+                    strb_append(&code, snbuf);
+                } else {
+                    printf("%c", stack[--sp]);
+                }
                 vm.ip++;
             } else if (op.op == LOOP) {
+                assert(!gen && "GenIR not implemented");
                 vm.ip++;
             } else if (op.op == END) {
+                assert(!gen && "GenIR not implemented");
                 if (DEBUG)
                     printf("Jumping to %s:%d:%d\n", vm.program.data[vm.ip].loc.path, vm.program.data[vm.ip].loc.row, vm.program.data[vm.ip].loc.col);
 
@@ -602,6 +631,7 @@ void interpet() {
                     }
                 }
             } else if (op.op == DO) {
+                assert(!gen && "GenIR not implemented");
                 if (sp - 1 < 0)
                     error(ERR_UNDERFLOW, op, "`do` requires at least one value on the stack.\n");
 
@@ -630,7 +660,13 @@ void interpet() {
                 else
                     printf("%.*s", (int)stringTable.data[strIdx].len, stringTable.data[strIdx].cstr);
                 vm.ip++;
+
+                if (gen) {
+                    snprintf(snbuf, 256, "\tcall $printf(l $str_%d, ...)\n", strIdx);
+                    strb_append(&code, snbuf);
+                }
             } else {
+                assert(!gen && "GenIR not implemented");
                 printf("Unhandled intrinsic %d\n", op.op);
                 // FIXME: Unhandled memory before exit? Let it leek?
                 exit(1);
@@ -647,6 +683,7 @@ void interpet() {
             vm.ip++;
         } break;
         case OPT_BDUMP: {
+            assert(!gen && "GenIR not implemented");
             printf("> Back Stack Dump:\n");
             for (int j = 0; j < bsp; j++) {
                 printf("[%d] %d\n", j, backStack[j]);
@@ -722,6 +759,8 @@ void interpet() {
         }
     }
 
+    strb_append(&code, "\tret 0\n}\n");
+
     if (sp != 0) {
         // TODO: Move this to error() ?
         printf("E: Unhandled data on the stack.\n");
@@ -730,17 +769,52 @@ void interpet() {
         }
     }
 
+    strb_append(&data, code.str);
+
+    FILE *out = fopen("./output.ssa", "w");
+    fwrite(data.str, sizeof(char), data.cnt, out);
+    fclose(out);
+
+    if (system("qbe ./output.ssa -o output.s") != 0) {
+        printf("CompilerError: qbe return non zero.\n");
+        goto defer;
+    }
+
+    if (system("clang -o output output.s") != 0) {
+        printf("CompilerError: clang return non zero.\n");
+    }
+
+defer:
     VEC_FREE(loops);
+    strb_free(code);
+    strb_free(data);
 }
 
 int main(int argc, char **argv) {
 
-    if (argc != 2)
+    if (argc < 2)
         return 1;
 
     _ *argv++;
 
     const char *path = *argv++;
+
+    bool gen = false;
+    if (argc == 3) {
+        const char *genArg = *argv++;
+        if (strncmp(genArg, "gen", 3) == 0)
+            gen = true;
+    }
+
+    if (gen && system("qbe -h 1> /dev/null") != 0) {
+        printf("QBE backend not installed system wide.\n");
+        return 1;
+    }
+
+    if (gen && system("clang --version 1> /dev/null") != 0) {
+        printf("Clang not installed system wide.\n");
+        return 1;
+    }
 
     size_t len;
     char *code = read_file(path, &len);
@@ -773,7 +847,7 @@ int main(int argc, char **argv) {
     }
 
     BENCH_START(&b);
-    interpet();
+    interpet(gen);
     MEASURE(&b, "Interpet");
 
     free(code);
