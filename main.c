@@ -401,6 +401,8 @@ void tokenize(const char *path, const char *code, size_t len) {
                     VEC_ADD(&vm.program, OP_IDENT(PUTD, l));
                 } else if (strncmp("loop", tmp.str, 4) == 0) {
                     VEC_ADD(&vm.program, OP_IDENT(LOOP, l));
+                } else if (strncmp("endif", tmp.str, 5) == 0) {
+                    VEC_ADD(&vm.program, OP_IDENT(ENDIF, l));
                 } else if (strncmp("end", tmp.str, 3) == 0) {
                     VEC_ADD(&vm.program, OP_IDENT(END, l));
                 } else if (strncmp("do", tmp.str, 2) == 0) {
@@ -411,6 +413,10 @@ void tokenize(const char *path, const char *code, size_t len) {
                     VEC_ADD(&vm.program, OP_IDENT(PRINTLN, l));
                 } else if (strncmp("print", tmp.str, 5) == 0) {
                     VEC_ADD(&vm.program, OP_IDENT(PRINT, l));
+                } else if (strncmp("if", tmp.str, 2) == 0) {
+                    VEC_ADD(&vm.program, OP_IDENT(IF, l));
+                } else if (strncmp("else", tmp.str, 4) == 0) {
+                    VEC_ADD(&vm.program, OP_IDENT(ELSE, l));
                 } else {
                     printf("Ident not handled! %s\n", tmp.str);
                     exit(1);
@@ -438,6 +444,7 @@ typedef enum {
     ERR_OVERFLOW,
     ERR_UNDERFLOW,
     ERR_UNCLOSED_LOOP,
+    ERR_UNCLOSED_IF,
     ERR_NO_DO,
     ERR_NO_STR,
 } ErrorType;
@@ -480,34 +487,48 @@ typedef struct {
     int cap;
 } loopinfo;
 
+typedef struct {
+    int ifIp;
+    int elseIp;
+    int endIp;
+} iff;
+
+typedef struct {
+    iff *data;
+    int cnt;
+    int cap;
+} ifinfo;
+
 static loopinfo loops = {0};
+static ifinfo ifs = {0};
 
 void controlFlowLink() {
     int ip = 0;
 
     while (vm.program.data[ip].type != OPT_NOP) {
-
-        if (vm.program.data[ip].type != OPT_IDENT) {
+        OP op = vm.program.data[ip];
+        if (op.type != OPT_IDENT) {
             ip++;
             continue;
         }
 
-        if (vm.program.data[ip].op == LOOP) {
+        if (op.op == LOOP) {
             int loopIp = ip;
             int doIp = -1;
             int end = ip + 1;
 
             int loopCnt = 1;
             while (loopCnt > 0) {
-                if (vm.program.data[end].type == OPT_NOP)
-                    error(ERR_UNCLOSED_LOOP, vm.program.data[end], "`do` requires an `end` keyword.\n");
+                OP endOP = vm.program.data[end];
+                if (endOP.type == OPT_NOP)
+                    error(ERR_UNCLOSED_LOOP, endOP, "`do` requires an `end` keyword.\n");
 
-                if (vm.program.data[end].type == OPT_IDENT && vm.program.data[end].op == DO && doIp == -1)
+                if (endOP.type == OPT_IDENT && endOP.op == DO && doIp == -1)
                     doIp = end;
 
-                if (vm.program.data[end].type == OPT_IDENT && vm.program.data[end].op == LOOP)
+                if (endOP.type == OPT_IDENT && endOP.op == LOOP)
                     loopCnt++;
-                if (vm.program.data[end].type == OPT_IDENT && vm.program.data[end].op == END) {
+                if (endOP.type == OPT_IDENT && endOP.op == END) {
                     loopCnt--;
                     if (loopCnt == 0)
                         break;
@@ -520,6 +541,31 @@ void controlFlowLink() {
 
             loop l = (loop){.loopIp = loopIp, .doIp = doIp, .endIp = end};
             VEC_ADD(&loops, l);
+        } else if (op.op == IF) {
+            int ifIp = ip;
+            int end = ip + 1;
+            int elseIp = -1;
+
+            int ifCnt = 1;
+            while (ifCnt > 0) {
+                OP endOP = vm.program.data[end];
+                if (endOP.type == OPT_NOP)
+                    error(ERR_UNCLOSED_IF, endOP, "`if` requires and `endif` keyword\n");
+
+                if (endOP.type == OPT_IDENT && endOP.op == IF)
+                    ifCnt++;
+                if (endOP.type == OPT_IDENT && endOP.op == ELSE && ifCnt == 1)
+                    elseIp = end;
+                if (endOP.type == OPT_IDENT && endOP.op == ENDIF) {
+                    ifCnt--;
+                    if (ifCnt == 0)
+                        break;
+                }
+                end++;
+            }
+
+            iff i = (iff){.ifIp = ifIp, .endIp = end, .elseIp = elseIp};
+            VEC_ADD(&ifs, i);
         }
         ip++;
     }
@@ -695,6 +741,33 @@ void interpet(bool gen) {
                     snprintf(snbuf, 256, "\tcall $printf(l $str_%d, ...)\n", strIdx);
                     strb_append(&code, snbuf);
                 }
+            } else if (op.op == IF) {
+                if (sp - 1 < 0)
+                    error(ERR_UNDERFLOW, op, "`if` requires at least one value on the stack.\n");
+
+                int top = stack[--sp];
+                if (top)
+                    vm.ip++;
+                else {
+                    for (int i = 0; i < ifs.cnt; i++) {
+                        if (ifs.data[i].ifIp == vm.ip && ifs.data[i].elseIp != -1) {
+                            vm.ip = ifs.data[i].elseIp + 1;
+                            break;
+                        } else if (ifs.data[i].ifIp == vm.ip) {
+                            vm.ip = ifs.data[i].endIp;
+                            break;
+                        }
+                    }
+                }
+            } else if (op.op == ELSE) {
+                for (int i = 0; i < ifs.cnt; i++) {
+                    if (ifs.data[i].elseIp == vm.ip) {
+                        vm.ip = ifs.data[i].endIp;
+                        break;
+                    }
+                }
+            } else if (op.op == ENDIF) {
+                vm.ip++;
             } else {
                 assert(!gen && "GenIR not implemented");
                 printf("Unhandled intrinsic %d\n", op.op);
@@ -816,6 +889,7 @@ void interpet(bool gen) {
 
 defer:
     VEC_FREE(loops);
+    VEC_FREE(ifs);
     strb_free(code);
     strb_free(data);
 }
