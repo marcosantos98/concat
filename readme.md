@@ -39,3 +39,6 @@
 | putc | print char | out(t); sp-- | 1 |
 | print | print string | out(t); sp-- | 1 |
 | println | print string with new line | out("<t>\n"); sp-- | 1 |
+| if | if start | t != 0 | 1 |
+| else | execute body if not true | - | 0 |
+| endif | end if body | - | 0 |
