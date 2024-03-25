@@ -155,6 +155,36 @@ typedef struct {
 #define PUTC 4
 #define PRINTLN 5
 #define PRINT 6
+#define IF 7
+#define ELSE 8
+#define ENDIF 9
+
+char *identCstr(int ident) {
+    switch (ident) {
+    case PUTD:
+        return "PUTD";
+    case LOOP:
+        return "LOOP";
+    case END:
+        return "END";
+    case DO:
+        return "DO";
+    case PUTC:
+        return "PUTC";
+    case PRINTLN:
+        return "PRINTLN";
+    case PRINT:
+        return "PRINT";
+    case IF:
+        return "IF";
+    case ELSE:
+        return "ELSE";
+    case ENDIF:
+        return "ENDIF";
+    default:
+        return "Unknown ident";
+    }
+}
 
 typedef struct {
     OP *data;
@@ -830,7 +860,10 @@ int main(int argc, char **argv) {
     if (DEBUG) {
         for (int i = 0; i < vm.program.cnt; i++) {
             printf("[%d] OP: %s\n", i, optypeCStr(vm.program.data[i].type));
-            printf("    > operand: %d\n", vm.program.data[i].op);
+            if (vm.program.data[i].type == OPT_IDENT)
+                printf("    > operand: %s\n", identCstr(vm.program.data[i].op));
+            else
+                printf("    > operand: %d\n", vm.program.data[i].op);
             printf("    > loc: %s:%d:%d\n", vm.program.data[i].loc.path, vm.program.data[i].loc.row, vm.program.data[i].loc.col);
         }
         printf("================================\n");
