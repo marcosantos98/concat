@@ -1,5 +1,12 @@
 # concat
 
+### How to:
+
+1. Compile concat using `make`
+2. Use `./main <source>` to use concat in interpet mode
+3. [Optional] Give `gen` arg to generate qbe IR and clang to compile to native binary. `./main <source> gen`
+    - This is very WIP.
+
 ### Operators:
 
 - t: value on the top of the stack
