@@ -27,6 +27,7 @@ typedef enum {
     OPT_MOD,
     OPT_LT,
     OPT_GT,
+    OPT_EQ,
     OPT_LIT_NUMBER,
     OPT_LIT_STR,
     OPT_IDENT,
@@ -56,6 +57,8 @@ char *optypeCStr(OPType op) {
         return "OPT_LT";
     case OPT_GT:
         return "OPT_GT";
+    case OPT_EQ:
+        return "OPT_EQ";
     case OPT_LIT_NUMBER:
         return "OPT_LIT_NUMBER";
     case OPT_LIT_STR:
@@ -125,6 +128,8 @@ typedef struct {
     (OP) { .type = OPT_LT, .loc = l }
 #define OP_GT(l) \
     (OP) { .type = OPT_GT, .loc = l }
+#define OP_EQ(l) \
+    (OP) { .type = OPT_EQ, .loc = l }
 #define OP_LIT_NUMBER(o, l) \
     (OP) { .type = OPT_LIT_NUMBER, .op = o, .loc = l }
 #define OP_LIT_STR(sIdx, l) \
@@ -335,6 +340,12 @@ void tokenize(const char *path, const char *code, size_t len) {
         case '>': {
             Loc l = LOC(path, col, row);
             VEC_ADD(&vm.program, OP_GT(l));
+            cursor++;
+            col++;
+        } break;
+        case '=': {
+            Loc l = LOC(path, col, row);
+            VEC_ADD(&vm.program, OP_EQ(l));
             cursor++;
             col++;
         } break;
@@ -666,6 +677,15 @@ void interpet(bool gen) {
             int top = stack[--sp];
             int t2 = stack[--sp];
             stack[sp++] = top > t2;
+            vm.ip++;
+        } break;
+        case OPT_EQ: {
+            if (sp - 2 < 0)
+                error(ERR_UNDERFLOW, op, "= requires at least two values on the stack.\n");
+
+            int top = stack[--sp];
+            int t2 = stack[--sp];
+            stack[sp++] = top == t2;
             vm.ip++;
         } break;
         case OPT_IDENT: {
