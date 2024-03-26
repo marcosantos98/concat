@@ -32,6 +32,7 @@
 | % | mod | t = t % ut | 2 |
 | < | less than | t = t < ut | 2 |
 | > | greater than | t = t > ut | 2 |
+| = | equality | t = t == ut | 2 |
 | sout | print | out(t); sp-- | 1 |
 | do | start loop | t != 0 | 0 |
 | loop | check loop condition | t == 1 | 1 | 
