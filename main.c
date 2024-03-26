@@ -197,9 +197,15 @@ typedef struct {
     int cap;
 } Program;
 
+#define MAX_STACK 100
+
 typedef struct {
     Program program;
     int ip;
+    int stack[MAX_STACK];
+    int sp;
+    int backStack[MAX_STACK];
+    int bsp;
 } VM;
 
 static VM vm = {0};
@@ -447,8 +453,6 @@ void tokenize(const char *path, const char *code, size_t len) {
     strb_free(tmp);
 }
 
-#define MAX_STACK 100
-
 #include <stdarg.h>
 
 typedef enum {
@@ -582,12 +586,7 @@ void controlFlowLink() {
     }
 }
 
-void interpet(bool gen) {
-
-    int sp = 0;
-    int stack[MAX_STACK] = {0};
-    int bsp = 0;
-    int backStack[MAX_STACK] = {0};
+void interpet(VM *vm, Program program, bool gen) {
 
     strb data = strb_init(32);
 
@@ -604,140 +603,140 @@ void interpet(bool gen) {
     strb_append(&code, "export function w $main() {\n");
     strb_append(&code, "@start\n");
 
-    while (vm.program.data[vm.ip].type != OPT_NOP) {
-        OP op = vm.program.data[vm.ip];
+    while (program.data[vm->ip].type != OPT_NOP) {
+        OP op = program.data[vm->ip];
         switch (op.type) {
         case OPT_LIT_NUMBER:
         case OPT_LIT_STR: {
-            if (sp + 1 >= MAX_STACK)
+            if (vm->sp + 1 >= MAX_STACK)
                 error(ERR_OVERFLOW, op, "Can't push literal number %d\n", op.op);
 
-            stack[sp++] = op.op;
-            vm.ip++;
+            vm->stack[vm->sp++] = op.op;
+            vm->ip++;
         } break;
         case OPT_PLUS: {
-            if (sp - 2 < 0)
+            if (vm->sp - 2 < 0)
                 error(ERR_UNDERFLOW, op, "+ requires at least two values on the stack.\n");
 
-            int top = stack[--sp];
-            int t2 = stack[--sp];
-            stack[sp++] = top + t2;
-            vm.ip++;
+            int top = vm->stack[--vm->sp];
+            int t2 = vm->stack[--vm->sp];
+            vm->stack[vm->sp++] = top + t2;
+            vm->ip++;
         } break;
         case OPT_MINUS: {
-            if (sp - 2 < 0)
+            if (vm->sp - 2 < 0)
                 error(ERR_UNDERFLOW, op, "- requires at least two values on the stack.\n");
 
-            int top = stack[--sp];
-            int t2 = stack[--sp];
-            stack[sp++] = top - t2;
-            vm.ip++;
+            int top = vm->stack[--vm->sp];
+            int t2 = vm->stack[--vm->sp];
+            vm->stack[vm->sp++] = top - t2;
+            vm->ip++;
         } break;
         case OPT_MULT: {
-            if (sp - 2 < 0)
+            if (vm->sp - 2 < 0)
                 error(ERR_UNDERFLOW, op, "* requires at least two values on the stack.\n");
 
-            int top = stack[--sp];
-            int t2 = stack[--sp];
-            stack[sp++] = top * t2;
-            vm.ip++;
+            int top = vm->stack[--vm->sp];
+            int t2 = vm->stack[--vm->sp];
+            vm->stack[vm->sp++] = top * t2;
+            vm->ip++;
         } break;
         case OPT_DIV: {
-            if (sp - 2 < 0)
+            if (vm->sp - 2 < 0)
                 error(ERR_UNDERFLOW, op, "/ requires at least two values on the stack.\n");
 
-            int top = stack[--sp];
-            int t2 = stack[--sp];
+            int top = vm->stack[--vm->sp];
+            int t2 = vm->stack[--vm->sp];
             // TODO: Check for division by zero
-            stack[sp++] = top / t2;
-            vm.ip++;
+            vm->stack[vm->sp++] = top / t2;
+            vm->ip++;
         } break;
         case OPT_MOD: {
-            if (sp - 2 < 0)
+            if (vm->sp - 2 < 0)
                 error(ERR_UNDERFLOW, op, "% requires at least two values on the stack.\n");
 
-            int top = stack[--sp];
-            int t2 = stack[--sp];
-            stack[sp++] = top % t2;
-            vm.ip++;
+            int top = vm->stack[--vm->sp];
+            int t2 = vm->stack[--vm->sp];
+            vm->stack[vm->sp++] = top % t2;
+            vm->ip++;
         } break;
         case OPT_LT: {
-            if (sp - 2 < 0)
+            if (vm->sp - 2 < 0)
                 error(ERR_UNDERFLOW, op, "< requires at least two values on the stack.\n");
 
-            int top = stack[--sp];
-            int t2 = stack[--sp];
-            stack[sp++] = top < t2;
-            vm.ip++;
+            int top = vm->stack[--vm->sp];
+            int t2 = vm->stack[--vm->sp];
+            vm->stack[vm->sp++] = top < t2;
+            vm->ip++;
         } break;
         case OPT_GT: {
-            if (sp - 2 < 0)
+            if (vm->sp - 2 < 0)
                 error(ERR_UNDERFLOW, op, "> requires at least two values on the stack.\n");
 
-            int top = stack[--sp];
-            int t2 = stack[--sp];
-            stack[sp++] = top > t2;
-            vm.ip++;
+            int top = vm->stack[--vm->sp];
+            int t2 = vm->stack[--vm->sp];
+            vm->stack[vm->sp++] = top > t2;
+            vm->ip++;
         } break;
         case OPT_EQ: {
-            if (sp - 2 < 0)
+            if (vm->sp - 2 < 0)
                 error(ERR_UNDERFLOW, op, "= requires at least two values on the stack.\n");
 
-            int top = stack[--sp];
-            int t2 = stack[--sp];
-            stack[sp++] = top == t2;
-            vm.ip++;
+            int top = vm->stack[--vm->sp];
+            int t2 = vm->stack[--vm->sp];
+            vm->stack[vm->sp++] = top == t2;
+            vm->ip++;
         } break;
         case OPT_IDENT: {
             if (op.op == PUTD) {
-                if (sp - 1 < 0)
+                if (vm->sp - 1 < 0)
                     error(ERR_UNDERFLOW, op, "`putd` requires at least one value on the stack.\n");
 
-                vm.ip++;
+                vm->ip++;
 
                 if (gen) {
-                    snprintf(snbuf, 256, "\tcall $printf(l $putd_fmt, ..., w %d)\n", stack[--sp]);
+                    snprintf(snbuf, 256, "\tcall $printf(l $putd_fmt, ..., w %d)\n", vm->stack[--vm->sp]);
                     strb_append(&code, snbuf);
                 } else {
-                    printf("%d", stack[--sp]);
+                    printf("%d", vm->stack[--vm->sp]);
                 }
             } else if (op.op == PUTC) {
-                if (sp - 1 < 0)
+                if (vm->sp - 1 < 0)
                     error(ERR_UNDERFLOW, op, "`putc` requires at least one value on the stack.\n");
 
                 if (gen) {
-                    snprintf(snbuf, 256, "\tcall $printf(l $putc_fmt, ..., w %d)\n", stack[--sp]);
+                    snprintf(snbuf, 256, "\tcall $printf(l $putc_fmt, ..., w %d)\n", vm->stack[--vm->sp]);
                     strb_append(&code, snbuf);
                 } else {
-                    printf("%c", stack[--sp]);
+                    printf("%c", vm->stack[--vm->sp]);
                 }
-                vm.ip++;
+                vm->ip++;
             } else if (op.op == LOOP) {
                 assert(!gen && "GenIR not implemented");
-                vm.ip++;
+                vm->ip++;
             } else if (op.op == END) {
                 assert(!gen && "GenIR not implemented");
                 if (DEBUG)
-                    printf("Jumping to %s:%d:%d\n", vm.program.data[vm.ip].loc.path, vm.program.data[vm.ip].loc.row, vm.program.data[vm.ip].loc.col);
+                    printf("Jumping to %s:%d:%d\n", program.data[vm->ip].loc.path, program.data[vm->ip].loc.row, program.data[vm->ip].loc.col);
 
                 for (int i = 0; i < loops.cnt; i++) {
-                    if (loops.data[i].endIp == vm.ip) {
-                        vm.ip = loops.data[i].loopIp;
+                    if (loops.data[i].endIp == vm->ip) {
+                        vm->ip = loops.data[i].loopIp;
                         break;
                     }
                 }
             } else if (op.op == DO) {
                 assert(!gen && "GenIR not implemented");
-                if (sp - 1 < 0)
+                if (vm->sp - 1 < 0)
                     error(ERR_UNDERFLOW, op, "`do` requires at least one value on the stack.\n");
 
-                int top = stack[--sp];
+                int top = vm->stack[--vm->sp];
                 if (top) {
-                    vm.ip++;
+                    vm->ip++;
                 } else {
                     for (int i = 0; i < loops.cnt; i++) {
-                        if (loops.data[i].doIp == vm.ip) {
-                            vm.ip = loops.data[i].endIp + 1;
+                        if (loops.data[i].doIp == vm->ip) {
+                            vm->ip = loops.data[i].endIp + 1;
                             break;
                         }
                     }
@@ -747,47 +746,47 @@ void interpet(bool gen) {
                 if (stringTable.cnt == 0)
                     error(ERR_NO_STR, op, "`println` or `print` requires an string index. Be sure to push a string before using it.\n");
 
-                if (sp - 1 < 0)
+                if (vm->sp - 1 < 0)
                     error(ERR_UNDERFLOW, op, "`println` or `print` requires at least one value on the stack.\n");
 
-                int strIdx = stack[--sp];
+                int strIdx = vm->stack[--vm->sp];
                 if (op.op == PRINTLN)
                     printf("%.*s\n", (int)stringTable.data[strIdx].len, stringTable.data[strIdx].cstr);
                 else
                     printf("%.*s", (int)stringTable.data[strIdx].len, stringTable.data[strIdx].cstr);
-                vm.ip++;
+                vm->ip++;
 
                 if (gen) {
                     snprintf(snbuf, 256, "\tcall $printf(l $str_%d, ...)\n", strIdx);
                     strb_append(&code, snbuf);
                 }
             } else if (op.op == IF) {
-                if (sp - 1 < 0)
+                if (vm->sp - 1 < 0)
                     error(ERR_UNDERFLOW, op, "`if` requires at least one value on the stack.\n");
 
-                int top = stack[--sp];
+                int top = vm->stack[--vm->sp];
                 if (top)
-                    vm.ip++;
+                    vm->ip++;
                 else {
                     for (int i = 0; i < ifs.cnt; i++) {
-                        if (ifs.data[i].ifIp == vm.ip && ifs.data[i].elseIp != -1) {
-                            vm.ip = ifs.data[i].elseIp + 1;
+                        if (ifs.data[i].ifIp == vm->ip && ifs.data[i].elseIp != -1) {
+                            vm->ip = ifs.data[i].elseIp + 1;
                             break;
-                        } else if (ifs.data[i].ifIp == vm.ip) {
-                            vm.ip = ifs.data[i].endIp;
+                        } else if (ifs.data[i].ifIp == vm->ip) {
+                            vm->ip = ifs.data[i].endIp;
                             break;
                         }
                     }
                 }
             } else if (op.op == ELSE) {
                 for (int i = 0; i < ifs.cnt; i++) {
-                    if (ifs.data[i].elseIp == vm.ip) {
-                        vm.ip = ifs.data[i].endIp;
+                    if (ifs.data[i].elseIp == vm->ip) {
+                        vm->ip = ifs.data[i].endIp;
                         break;
                     }
                 }
             } else if (op.op == ENDIF) {
-                vm.ip++;
+                vm->ip++;
             } else {
                 assert(!gen && "GenIR not implemented");
                 printf("Unhandled intrinsic %d\n", op.op);
@@ -797,84 +796,84 @@ void interpet(bool gen) {
         } break;
         case OPT_DUMP: {
             printf("> Stack Dump:\n");
-            for (int j = 0; j < sp; j++) {
-                printf("[%d] %d\n", j, stack[j]);
+            for (int j = 0; j < vm->sp; j++) {
+                printf("[%d] %d\n", j, vm->stack[j]);
             }
             printf("< End Stack Dump.\n");
-            if (vm.program.data[vm.ip + 1].type == OPT_BDUMP)
+            if (program.data[vm->ip + 1].type == OPT_BDUMP)
                 exit(1);
-            vm.ip++;
+            vm->ip++;
         } break;
         case OPT_BDUMP: {
             assert(!gen && "GenIR not implemented");
             printf("> Back Stack Dump:\n");
-            for (int j = 0; j < bsp; j++) {
-                printf("[%d] %d\n", j, backStack[j]);
+            for (int j = 0; j < vm->sp; j++) {
+                printf("[%d] %d\n", j, vm->backStack[j]);
             }
             printf("< End Back Stack Dump.\n");
-            vm.ip++;
+            vm->ip++;
         } break;
         case OPT_DUP: {
-            if (sp - 1 < 0)
+            if (vm->sp - 1 < 0)
                 error(ERR_UNDERFLOW, op, ". requires at least one value on the stack.\n");
 
-            stack[sp] = stack[sp - 1];
-            sp++;
-            vm.ip++;
+            vm->stack[vm->sp] = vm->stack[vm->sp - 1];
+            vm->sp++;
+            vm->ip++;
         } break;
         case OPT_2DUP: {
-            if (sp - 2 < 0)
+            if (vm->sp - 2 < 0)
                 error(ERR_UNDERFLOW, op, ": requires at least two value on the stack.\n");
 
-            stack[sp] = stack[sp - 2];
-            stack[sp + 1] = stack[sp - 1];
-            sp += 2;
-            vm.ip++;
+            vm->stack[vm->sp] = vm->stack[vm->sp - 2];
+            vm->stack[vm->sp + 1] = vm->stack[vm->sp - 1];
+            vm->sp += 2;
+            vm->ip++;
         } break;
         case OPT_DROP: {
-            if (sp - 1 < 0)
+            if (vm->sp - 1 < 0)
                 error(ERR_UNDERFLOW, op, ", requires at least one value on the stack.\n");
 
-            sp--;
-            vm.ip++;
+            vm->sp--;
+            vm->ip++;
         } break;
         case OPT_SWAP: {
-            if (sp - 2 < 0)
+            if (vm->sp - 2 < 0)
                 error(ERR_UNDERFLOW, op, "; requires at least one value on the stack.\n");
 
-            int top = stack[--sp];
-            int t2 = stack[--sp];
-            stack[sp++] = top;
-            stack[sp++] = t2;
-            vm.ip++;
+            int top = vm->stack[--vm->sp];
+            int t2 = vm->stack[--vm->sp];
+            vm->stack[vm->sp++] = top;
+            vm->stack[vm->sp++] = t2;
+            vm->ip++;
         } break;
         case OPT_STASH: {
-            if (sp - 1 < 0)
+            if (vm->sp - 1 < 0)
                 error(ERR_UNDERFLOW, op, "<- requires at least one value on the stack.\n");
 
-            int top = stack[--sp];
-            if (sp - top < 0)
-                error(ERR_UNDERFLOW, op, "Trying to stash %d values on the stack, but only %d are available.\n", top, sp);
-            if (bsp + top >= MAX_STACK)
+            int top = vm->stack[--vm->sp];
+            if (vm->sp - top < 0)
+                error(ERR_UNDERFLOW, op, "Trying to stash %d values on the stack, but only %d are available.\n", top, vm->sp);
+            if (vm->bsp + top >= MAX_STACK)
                 error(ERR_OVERFLOW, op, "Can't stash %d values on back stack.\n", top);
 
             for (int n = 0; n < top; n++)
-                backStack[bsp++] = stack[--sp];
-            vm.ip++;
+                vm->backStack[vm->bsp++] = vm->stack[--vm->sp];
+            vm->ip++;
         } break;
         case OPT_POP: {
-            if (sp - 1 < 0)
+            if (vm->sp - 1 < 0)
                 error(ERR_UNDERFLOW, op, "-> requires at least one value on the stack.\n");
 
-            int top = stack[--sp];
-            if (bsp - top < 0)
-                error(ERR_UNDERFLOW, op, "Trying to pop %d values from the back stack, but only %d are available.\n", top, bsp);
-            if (sp + top >= MAX_STACK)
+            int top = vm->stack[--vm->sp];
+            if (vm->bsp - top < 0)
+                error(ERR_UNDERFLOW, op, "Trying to pop %d values from the back stack, but only %d are available.\n", top, vm->sp);
+            if (vm->sp + top >= MAX_STACK)
                 error(ERR_OVERFLOW, op, "Can't pop %d values on stack.\n", top);
 
             for (int n = 0; n < top; n++)
-                stack[sp++] = backStack[--bsp];
-            vm.ip++;
+                vm->stack[vm->sp++] = vm->backStack[--vm->bsp];
+            vm->ip++;
         } break;
         default:
             printf("Unhandled op %s\n", optypeCStr(op.type));
@@ -884,11 +883,11 @@ void interpet(bool gen) {
 
     strb_append(&code, "\tret 0\n}\n");
 
-    if (sp != 0) {
+    if (vm->sp != 0) {
         // TODO: Move this to error() ?
         printf("E: Unhandled data on the stack.\n");
-        for (int i = sp - 1; i >= 0; i--) {
-            printf("[%d] %d\n", i, stack[i]);
+        for (int i = vm->sp - 1; i >= 0; i--) {
+            printf("[%d] %d\n", i, vm->stack[i]);
         }
     }
 
@@ -974,7 +973,7 @@ int main(int argc, char **argv) {
     }
 
     BENCH_START(&b);
-    interpet(gen);
+    interpet(&vm, vm.program, gen);
     MEASURE(&b, "Interpet");
 
     free(code);
