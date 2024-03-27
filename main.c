@@ -3,12 +3,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "parser.h"
+#include "tokenizer.h"
+
 #include <bench.h>
 #include <io.h>
 #include <strb.h>
 #include <vector.h>
 
-#define DEBUG 0
+#define DEBUG 1
 
 #define MEASURE(bPtr, strmsg)            \
     do {                                 \
@@ -96,12 +99,6 @@ typedef struct {
     int cnt;
     int cap;
 } Strings;
-
-typedef struct {
-    const char *path;
-    int col;
-    int row;
-} Loc;
 
 #define LOC(path, col, row) \
     (Loc) { path, col, row }
@@ -211,247 +208,196 @@ typedef struct {
 static VM vm = {0};
 static Strings stringTable = {0};
 
-size_t parseLiteralNumber(const char *code, size_t cursor, strb *s) {
-
-    size_t end = cursor;
-
-    while (isdigit(code[end])) {
-        strb_append_single(s, code[end]);
-        end++;
-    }
-
-    strb_append_single(s, 0);
-
-    return end;
-}
-
-size_t parseIdent(const char *code, size_t cursor, strb *s) {
-
-    size_t end = cursor;
-
-    while (isalpha(code[end])) {
-        strb_append_single(s, code[end]);
-        end++;
-    }
-
-    strb_append_single(s, 0);
-
-    return end;
-}
-
-size_t parseComment(const char *code, size_t cursor) {
-    size_t end = cursor;
-    while (code[end] != 10)
-        end++;
-    return end;
-}
-
-size_t parseStr(const char *code, size_t *cursor, strb *s) {
-    size_t start = *cursor;
-    size_t end = *cursor;
-    end++;
-    while (code[end] != '"') {
-        strb_append_single(s, code[end]);
-        end++;
-    }
-
-    end++; // close "
-
-    *cursor = end;
-
-    return end - start - 2;
-}
-
-void tokenize(const char *path, const char *code, size_t len) {
-    size_t cursor = 0;
-
-    strb tmp = strb_init(1024);
-
-    int col = 1;
-    int row = 1;
-
-    while (cursor < len) {
-        // printf("Parsing %c at %s:%d:%d\n", code[cursor], path, row, col);
-        switch (code[cursor]) {
-        case '"': {
-            String s = {0};
-            s.len = parseStr(code, &cursor, &tmp);
-            s.cstr = malloc(sizeof(char) * s.len);
-            memcpy(s.cstr, tmp.str, s.len);
-            tmp.cnt = 0;
-            VEC_ADD(&stringTable, s);
-
-            Loc l = LOC(path, col, row);
-            VEC_ADD(&vm.program, OP_LIT_STR(stringTable.cnt - 1, l));
-
-            col += s.len;
-        } break;
-        case '+': {
-            Loc l = LOC(path, col, row);
-            VEC_ADD(&vm.program, OP_PLUS(l));
-            cursor++;
-            col++;
-        } break;
-        case '-': {
-            if (code[cursor + 1] == '>') {
-                Loc l = LOC(path, col, row);
-                VEC_ADD(&vm.program, OP_POP(l));
-                cursor += 2;
-                col += 2;
-            } else {
-                Loc l = LOC(path, col, row);
-                VEC_ADD(&vm.program, OP_MINUS(l));
-                cursor++;
-                col++;
-            }
-        } break;
-        case '*': {
-            Loc l = LOC(path, col, row);
-            VEC_ADD(&vm.program, OP_MULT(l));
-            cursor++;
-            col++;
-        } break;
-        case '/': {
-            if (code[cursor + 1] == '/') {
-                size_t old = cursor;
-                cursor = parseComment(code, cursor);
-                col += cursor - old;
-            } else {
-
-                Loc l = LOC(path, col, row);
-                VEC_ADD(&vm.program, OP_DIV(l));
-                cursor++;
-                col++;
-            }
-        } break;
-        case '%': {
-            Loc l = LOC(path, col, row);
-            VEC_ADD(&vm.program, OP_MOD(l));
-            cursor++;
-            col++;
-        } break;
-        case '<': {
-            if (code[cursor + 1] == '-') {
-                Loc l = LOC(path, col, row);
-                VEC_ADD(&vm.program, OP_STASH(l));
-                cursor += 2;
-                col += 2;
-            } else {
-                Loc l = LOC(path, col, row);
-                VEC_ADD(&vm.program, OP_LT(l));
-                cursor++;
-                col++;
-            }
-        } break;
-        case '>': {
-            Loc l = LOC(path, col, row);
-            VEC_ADD(&vm.program, OP_GT(l));
-            cursor++;
-            col++;
-        } break;
-        case '=': {
-            Loc l = LOC(path, col, row);
-            VEC_ADD(&vm.program, OP_EQ(l));
-            cursor++;
-            col++;
-        } break;
-        case '?': {
-            Loc l = LOC(path, col, row);
-            VEC_ADD(&vm.program, OP_DUMP(l));
-            cursor++;
-            col++;
-        } break;
-        case '!': {
-            Loc l = LOC(path, col, row);
-            VEC_ADD(&vm.program, OP_BDUMP(l));
-            cursor++;
-            col++;
-        } break;
-        case '.': {
-            Loc l = LOC(path, col, row);
-            VEC_ADD(&vm.program, OP_DUP(l));
-            cursor++;
-            col++;
-        } break;
-        case ':': {
-            Loc l = LOC(path, col, row);
-            VEC_ADD(&vm.program, OP_2DUP(l));
-            cursor++;
-            col++;
-        } break;
-        case ',': {
-            Loc l = LOC(path, col, row);
-            VEC_ADD(&vm.program, OP_DROP(l));
-            cursor++;
-            col++;
-        } break;
-        case ';': {
-            Loc l = LOC(path, col, row);
-            VEC_ADD(&vm.program, OP_SWAP(l));
-            cursor++;
-            col++;
-        } break;
-        case '\t':
-        case ' ': {
-            cursor++;
-            col++;
-        } break;
-        case '\n':
-        case '\r': {
-            cursor++;
-            col = 1;
-            row += 1;
-        } break;
-        default: {
-            if (isdigit(code[cursor])) {
-                cursor = parseLiteralNumber(code, cursor, &tmp);
-                Loc l = LOC(path, col, row);
-                OP op = OP_LIT_NUMBER(atoi(tmp.str), l);
-                VEC_ADD(&vm.program, op);
-                col += tmp.cnt - 1; // Don't include the NULL terminator
-                tmp.cnt = 0;
-            } else if (isalpha(code[cursor])) {
-                cursor = parseIdent(code, cursor, &tmp);
-
-                Loc l = LOC(path, col, row);
-                if (strncmp("sout", tmp.str, 4) == 0) {
-                    VEC_ADD(&vm.program, OP_IDENT(PUTD, l));
-                } else if (strncmp("loop", tmp.str, 4) == 0) {
-                    VEC_ADD(&vm.program, OP_IDENT(LOOP, l));
-                } else if (strncmp("endif", tmp.str, 5) == 0) {
-                    VEC_ADD(&vm.program, OP_IDENT(ENDIF, l));
-                } else if (strncmp("end", tmp.str, 3) == 0) {
-                    VEC_ADD(&vm.program, OP_IDENT(END, l));
-                } else if (strncmp("do", tmp.str, 2) == 0) {
-                    VEC_ADD(&vm.program, OP_IDENT(DO, l));
-                } else if (strncmp("putc", tmp.str, 4) == 0) {
-                    VEC_ADD(&vm.program, OP_IDENT(PUTC, l));
-                } else if (strncmp("println", tmp.str, 7) == 0) {
-                    VEC_ADD(&vm.program, OP_IDENT(PRINTLN, l));
-                } else if (strncmp("print", tmp.str, 5) == 0) {
-                    VEC_ADD(&vm.program, OP_IDENT(PRINT, l));
-                } else if (strncmp("if", tmp.str, 2) == 0) {
-                    VEC_ADD(&vm.program, OP_IDENT(IF, l));
-                } else if (strncmp("else", tmp.str, 4) == 0) {
-                    VEC_ADD(&vm.program, OP_IDENT(ELSE, l));
-                } else {
-                    printf("Ident not handled! %s\n", tmp.str);
-                    exit(1);
-                }
-                col += tmp.cnt - 1;
-                tmp.cnt = 0;
-            } else {
-                printf("Char not handled %c\n", code[cursor]);
-                exit(1);
-            }
-        }
-        }
-    }
-
-    Loc l = LOC(path, col, row);
-    VEC_ADD(&vm.program, OP_NOP(l));
-    strb_free(tmp);
-}
+// void old_tokenize(const char *path, const char *code, size_t len) {
+//     size_t cursor = 0;
+//
+//     strb tmp = strb_init(1024);
+//
+//     int col = 1;
+//     int row = 1;
+//
+//     while (cursor < len) {
+//         // printf("Parsing %c at %s:%d:%d\n", code[cursor], path, row, col);
+//         switch (code[cursor]) {
+//         case '"': {
+//             String s = {0};
+//             s.len = parseStr(code, &cursor, &tmp);
+//             s.cstr = malloc(sizeof(char) * s.len);
+//             memcpy(s.cstr, tmp.str, s.len);
+//             tmp.cnt = 0;
+//             VEC_ADD(&stringTable, s);
+//
+//             Loc l = LOC(path, col, row);
+//             VEC_ADD(&vm.program, OP_LIT_STR(stringTable.cnt - 1, l));
+//
+//             col += s.len;
+//         } break;
+//         case '+': {
+//             Loc l = LOC(path, col, row);
+//             VEC_ADD(&vm.program, OP_PLUS(l));
+//             cursor++;
+//             col++;
+//         } break;
+//         case '-': {
+//             if (code[cursor + 1] == '>') {
+//                 Loc l = LOC(path, col, row);
+//                 VEC_ADD(&vm.program, OP_POP(l));
+//                 cursor += 2;
+//                 col += 2;
+//             } else {
+//                 Loc l = LOC(path, col, row);
+//                 VEC_ADD(&vm.program, OP_MINUS(l));
+//                 cursor++;
+//                 col++;
+//             }
+//         } break;
+//         case '*': {
+//             Loc l = LOC(path, col, row);
+//             VEC_ADD(&vm.program, OP_MULT(l));
+//             cursor++;
+//             col++;
+//         } break;
+//         case '/': {
+//             if (code[cursor + 1] == '/') {
+//                 size_t old = cursor;
+//                 cursor = parseComment(code, cursor);
+//                 col += cursor - old;
+//             } else {
+//
+//                 Loc l = LOC(path, col, row);
+//                 VEC_ADD(&vm.program, OP_DIV(l));
+//                 cursor++;
+//                 col++;
+//             }
+//         } break;
+//         case '%': {
+//             Loc l = LOC(path, col, row);
+//             VEC_ADD(&vm.program, OP_MOD(l));
+//             cursor++;
+//             col++;
+//         } break;
+//         case '<': {
+//             if (code[cursor + 1] == '-') {
+//                 Loc l = LOC(path, col, row);
+//                 VEC_ADD(&vm.program, OP_STASH(l));
+//                 cursor += 2;
+//                 col += 2;
+//             } else {
+//                 Loc l = LOC(path, col, row);
+//                 VEC_ADD(&vm.program, OP_LT(l));
+//                 cursor++;
+//                 col++;
+//             }
+//         } break;
+//         case '>': {
+//             Loc l = LOC(path, col, row);
+//             VEC_ADD(&vm.program, OP_GT(l));
+//             cursor++;
+//             col++;
+//         } break;
+//         case '=': {
+//             Loc l = LOC(path, col, row);
+//             VEC_ADD(&vm.program, OP_EQ(l));
+//             cursor++;
+//             col++;
+//         } break;
+//         case '?': {
+//             Loc l = LOC(path, col, row);
+//             VEC_ADD(&vm.program, OP_DUMP(l));
+//             cursor++;
+//             col++;
+//         } break;
+//         case '!': {
+//             Loc l = LOC(path, col, row);
+//             VEC_ADD(&vm.program, OP_BDUMP(l));
+//             cursor++;
+//             col++;
+//         } break;
+//         case '.': {
+//             Loc l = LOC(path, col, row);
+//             VEC_ADD(&vm.program, OP_DUP(l));
+//             cursor++;
+//             col++;
+//         } break;
+//         case ':': {
+//             Loc l = LOC(path, col, row);
+//             VEC_ADD(&vm.program, OP_2DUP(l));
+//             cursor++;
+//             col++;
+//         } break;
+//         case ',': {
+//             Loc l = LOC(path, col, row);
+//             VEC_ADD(&vm.program, OP_DROP(l));
+//             cursor++;
+//             col++;
+//         } break;
+//         case ';': {
+//             Loc l = LOC(path, col, row);
+//             VEC_ADD(&vm.program, OP_SWAP(l));
+//             cursor++;
+//             col++;
+//         } break;
+//         case '\t':
+//         case ' ': {
+//             cursor++;
+//             col++;
+//         } break;
+//         case '\n':
+//         case '\r': {
+//             cursor++;
+//             col = 1;
+//             row += 1;
+//         } break;
+//         default: {
+//             if (isdigit(code[cursor])) {
+//                 cursor = parseLiteralNumber(code, cursor, &tmp);
+//                 Loc l = LOC(path, col, row);
+//                 OP op = OP_LIT_NUMBER(atoi(tmp.str), l);
+//                 VEC_ADD(&vm.program, op);
+//                 col += tmp.cnt - 1; // Don't include the NULL terminator
+//                 tmp.cnt = 0;
+//             } else if (isalpha(code[cursor])) {
+//                 cursor = parseIdent(code, cursor, &tmp);
+//
+//                 Loc l = LOC(path, col, row);
+//                 if (strncmp("sout", tmp.str, 4) == 0) {
+//                     VEC_ADD(&vm.program, OP_IDENT(PUTD, l));
+//                 } else if (strncmp("loop", tmp.str, 4) == 0) {
+//                     VEC_ADD(&vm.program, OP_IDENT(LOOP, l));
+//                 } else if (strncmp("endif", tmp.str, 5) == 0) {
+//                     VEC_ADD(&vm.program, OP_IDENT(ENDIF, l));
+//                 } else if (strncmp("end", tmp.str, 3) == 0) {
+//                     VEC_ADD(&vm.program, OP_IDENT(END, l));
+//                 } else if (strncmp("do", tmp.str, 2) == 0) {
+//                     VEC_ADD(&vm.program, OP_IDENT(DO, l));
+//                 } else if (strncmp("putc", tmp.str, 4) == 0) {
+//                     VEC_ADD(&vm.program, OP_IDENT(PUTC, l));
+//                 } else if (strncmp("println", tmp.str, 7) == 0) {
+//                     VEC_ADD(&vm.program, OP_IDENT(PRINTLN, l));
+//                 } else if (strncmp("print", tmp.str, 5) == 0) {
+//                     VEC_ADD(&vm.program, OP_IDENT(PRINT, l));
+//                 } else if (strncmp("if", tmp.str, 2) == 0) {
+//                     VEC_ADD(&vm.program, OP_IDENT(IF, l));
+//                 } else if (strncmp("else", tmp.str, 4) == 0) {
+//                     VEC_ADD(&vm.program, OP_IDENT(ELSE, l));
+//                 } else {
+//                     printf("Ident not handled! %s\n", tmp.str);
+//                     exit(1);
+//                 }
+//                 col += tmp.cnt - 1;
+//                 tmp.cnt = 0;
+//             } else {
+//                 printf("Char not handled %c\n", code[cursor]);
+//                 exit(1);
+//             }
+//         }
+//         }
+//     }
+//
+//     Loc l = LOC(path, col, row);
+//     VEC_ADD(&vm.program, OP_NOP(l));
+//     strb_free(tmp);
+// }
 
 #include <stdarg.h>
 
@@ -944,46 +890,57 @@ int main(int argc, char **argv) {
     if (code == NULL)
         return 1;
 
+    Tokens tokens = {0};
+
     bench b = {0};
     BENCH_START(&b);
+    tokenize(path, code, len, &tokens);
+    MEASURE(&b, "Tokenizer");
 
-    tokenize(path, code, len);
-    MEASURE(&b, "Tokenize");
-
-    if (DEBUG) {
-        for (int i = 0; i < vm.program.cnt; i++) {
-            printf("[%d] OP: %s\n", i, optypeCStr(vm.program.data[i].type));
-            if (vm.program.data[i].type == OPT_IDENT)
-                printf("    > operand: %s\n", identCstr(vm.program.data[i].op));
-            else
-                printf("    > operand: %d\n", vm.program.data[i].op);
-            printf("    > loc: %s:%d:%d\n", vm.program.data[i].loc.path, vm.program.data[i].loc.row, vm.program.data[i].loc.col);
-        }
-        printf("================================\n");
-    }
-
-    BENCH_START(&b);
-    controlFlowLink();
-    MEASURE(&b, "ControlFlowLink");
-
-    if (DEBUG) {
-        for (int i = 0; i < loops.cnt; i++) {
-            printf("Loop: %d Do: %d End: %d\n", loops.data[i].loopIp, loops.data[i].doIp, loops.data[i].endIp);
-        }
-    }
-
-    BENCH_START(&b);
-    interpet(&vm, vm.program, gen);
-    MEASURE(&b, "Interpet");
+    Prog p = {0};
+    parseToOPs(tokens, &p);
 
     free(code);
-    VEC_FREE(vm.program);
 
-    for (int i = 0; i < stringTable.cnt; i++) {
-        free(stringTable.data[i].cstr);
-    }
-
-    VEC_FREE(stringTable);
+    //    BENCH_START(&b);
+    //
+    //    tokenize(path, code, len);
+    //    MEASURE(&b, "Tokenize");
+    //
+    //    if (DEBUG) {
+    //        for (int i = 0; i < vm.program.cnt; i++) {
+    //            printf("[%d] OP: %s\n", i, optypeCStr(vm.program.data[i].type));
+    //            if (vm.program.data[i].type == OPT_IDENT)
+    //                printf("    > operand: %s\n", identCstr(vm.program.data[i].op));
+    //            else
+    //                printf("    > operand: %d\n", vm.program.data[i].op);
+    //            printf("    > loc: %s:%d:%d\n", vm.program.data[i].loc.path, vm.program.data[i].loc.row, vm.program.data[i].loc.col);
+    //        }
+    //        printf("================================\n");
+    //    }
+    //
+    //    BENCH_START(&b);
+    //    controlFlowLink();
+    //    MEASURE(&b, "ControlFlowLink");
+    //
+    //    if (DEBUG) {
+    //        for (int i = 0; i < loops.cnt; i++) {
+    //            printf("Loop: %d Do: %d End: %d\n", loops.data[i].loopIp, loops.data[i].doIp, loops.data[i].endIp);
+    //        }
+    //    }
+    //
+    //    BENCH_START(&b);
+    //    interpet(&vm, vm.program, gen);
+    //    MEASURE(&b, "Interpet");
+    //
+    //    free(code);
+    //    VEC_FREE(vm.program);
+    //
+    //    for (int i = 0; i < stringTable.cnt; i++) {
+    //        free(stringTable.data[i].cstr);
+    //    }
+    //
+    //    VEC_FREE(stringTable);
 
     return 0;
 }
