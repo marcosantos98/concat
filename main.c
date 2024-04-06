@@ -1008,13 +1008,13 @@ int main(int argc, char **argv) {
 
     bench b = {0};
     BENCH_START(&b);
-
     Tokens tokens = {0};
     tokenize(code, len, path, &tokens);
     MEASURE(&b, "Tokenize");
 
     Program prog = {0};
     parse(tokens, &prog);
+    MEASURE(&b, "Parse tokens");
 
     printOps(prog);
 
