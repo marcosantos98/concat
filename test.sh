@@ -30,14 +30,14 @@ do
             if [ "$run" = "$out" ]
             then
                 echo "  PASS: $i"
-                ((PASS=PASS+1))
+                PASS=$((PASS+1))
             else
                 echo "  FAIL: $i"
-                ((FAILED=FAILED+1))
+                FAILED=$((FAILED+1))
             fi
         else
             echo "  Not recorded: $i"
-            ((NOT_RECORDED=NOT_RECORDED+1))
+            NOT_RECORDED=$((NOT_RECORDED+1))
         fi
     else
         FILE=$i.out
@@ -49,10 +49,10 @@ do
             if [ "$run" = "$out" ]
             then
                 echo "  PASS: $i"
-                ((PASS=PASS+1))
+                PASS=$((PASS+1))
             else
                 echo "  FAIL: $i"
-                ((FAILED=FAILED+1))
+                FAILED=$((FAILED+1))
             fi
         else
             echo "Run './test.sh rec' before running the tests or run './test.sh -or'."
