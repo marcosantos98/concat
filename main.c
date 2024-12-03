@@ -1002,7 +1002,7 @@ int main(int argc, char **argv) {
     }
 
     size_t len;
-    char *code = read_file(path, &len);
+    char *code = read_file_as_cstr(path, &len);
     if (code == NULL)
         return 1;
 
