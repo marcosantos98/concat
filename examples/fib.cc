@@ -1,4 +1,5 @@
-0 1 // n1, n2
+0 . sout 10 putc 
+1 . sout 10 putc
 
 1 loop . 20 > do
 	1 <- // Save i
