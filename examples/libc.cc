@@ -1,18 +1,23 @@
+0 O_RONLY def
+
+0 SEEK_SET def
+2 SEEK_END def
+
 i32 fd mem 
 i32 size mem
 i64 buf mem
 
 "Opening file examples!" println
 
-0 "./test.txt" open . 0 ; < if
+O_RONLY "./test.txt" open . 0 ; < if
 	"Failed to open file!" println
 	1 exit
 else
 	fd w_mem
 endif
 
-2 0 i32 fd deref lseek size w_mem 
-0 0 i32 fd deref lseek ,
+SEEK_END 0 i32 fd deref lseek size w_mem 
+SEEK_SET 0 i32 fd deref lseek ,
 
 i32 size deref malloc buf w64_mem
 

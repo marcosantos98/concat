@@ -341,6 +341,7 @@ typedef enum {
     W_ELSE,
     W_ENDIF,
 	W_AS_STR,
+	W_DEF,
 } WordType;
 
 typedef struct {
@@ -411,6 +412,8 @@ char *opTypeToStr(Op op) {
 			return "W_DEREF";
 		case W_AS_STR:
 			return "W_AS_STR";
+		case W_DEF:
+			return "W_DEF";
         default:
             return "W_DEFINED";
         }
@@ -451,6 +454,7 @@ typedef struct {
     UStrList strTable;
 	UStrList definedTable;
 	int definedData[MAX_DEFINED];
+	int constData[MAX_DEFINED];
 	char* mem;
 	int mp;
 } Program;
@@ -524,6 +528,8 @@ Op parseWordToken(Token t, Program *program) {
 		o.op = W_DEREF;
 	} else if (US_CMP(t.lit, "as_str") == 0) {
 		o.op = W_AS_STR;
+	} else if (US_CMP(t.lit, "def") == 0) {
+		o.op = W_DEF;
 	} else {
 		if (find_defined(*program, o) == -1) {
 			VEC_ADD(&program->definedTable, t.lit);
@@ -946,7 +952,11 @@ void interpetWord(int *stack, int *sp, int *ip, Op o, Program* prog) {
 			if (def_id == -1) {
 				printf("Something went wrong!\n");
 			}
-			tryPush(stack, sp, def_id, o);
+			if (prog->constData[def_id] != -1) {
+				tryPush(stack, sp, prog->constData[def_id], o);
+			} else {
+				tryPush(stack, sp, def_id, o);
+			}
 		}
         *ip += 1;
     } break;
@@ -1065,6 +1075,14 @@ void interpetWord(int *stack, int *sp, int *ip, Op o, Program* prog) {
 		tryPush(stack, sp, prog->strTable.cnt, o);
 		VEC_ADD(&prog->strTable, makeUStr((char*)ptr, 0, size));
 
+		*ip += 1;
+	} break;
+	case W_DEF: {
+		int defined_id = pop(stack, sp);
+		int val = pop(stack, sp);
+
+		//fixme: Dont allow redefinition
+		prog->constData[defined_id] = val;
 		*ip += 1;
 	} break;
 	default:
@@ -1227,6 +1245,7 @@ int main(int argc, char **argv) {
     MEASURE(&b, "Tokenize");
 
     Program prog = {0};
+	memset(prog.constData, -1, sizeof(int) * MAX_DEFINED);
 	prog.mem = malloc(4096);
     parse(tokens, &prog);
     MEASURE(&b, "Parse tokens");
