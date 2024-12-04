@@ -1,7 +1,10 @@
 #include <assert.h>
+#include <string.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include <bench.h>
 #include <io.h>
@@ -69,6 +72,7 @@ typedef struct {
     TokenType t;
     Loc l;
     UStr lit;
+	int index;
 } Token;
 
 typedef struct {
@@ -76,16 +80,17 @@ typedef struct {
     int cnt;
     int cap;
 } Tokens;
+static Tokens tokens = {0};
 
-Token makeToken(TokenType t, UStr lit, Loc l) {
-    return (Token){t, l, lit};
+Token makeToken(TokenType t, UStr lit, Loc l, int index) {
+    return (Token){t, l, lit, index};
 }
 
 UStr parseWord(char *const code, size_t *cursor) {
     size_t start = *cursor;
     size_t end = start;
 
-    while (isalpha(code[end]))
+    while (isalpha(code[end]) || code[end] == '_' || isdigit(code[end]))
         end++;
 
     *cursor = end;
@@ -135,13 +140,13 @@ bool tokenize(char *const code, size_t len, const char *path, Tokens *tokens) {
         case '"': {
             UStr s = parseStrLiteral(code, &cursor);
             Loc l = LOC(path, col, row);
-            VEC_ADD(tokens, makeToken(TT_LIT_STR, s, l));
+            VEC_ADD(tokens, makeToken(TT_LIT_STR, s, l, tokens->cnt));
             col += s.len;
         } break;
         case '+': {
             UStr s = makeUStr(code, cursor, 1);
             Loc l = LOC(path, col, row);
-            VEC_ADD(tokens, makeToken(TT_PLUS, s, l));
+            VEC_ADD(tokens, makeToken(TT_PLUS, s, l, tokens->cnt));
             cursor++;
             col++;
         } break;
@@ -149,13 +154,13 @@ bool tokenize(char *const code, size_t len, const char *path, Tokens *tokens) {
             if (code[cursor + 1] == '>') {
                 UStr s = makeUStr(code, cursor, 2);
                 Loc l = LOC(path, col, row);
-                VEC_ADD(tokens, makeToken(TT_POP, s, l));
+                VEC_ADD(tokens, makeToken(TT_POP, s, l, tokens->cnt));
                 cursor += 2;
                 col += 2;
             } else {
                 UStr s = makeUStr(code, cursor, 1);
                 Loc l = LOC(path, col, row);
-                VEC_ADD(tokens, makeToken(TT_MINUS, s, l));
+                VEC_ADD(tokens, makeToken(TT_MINUS, s, l, tokens->cnt));
                 cursor++;
                 col++;
             }
@@ -163,7 +168,7 @@ bool tokenize(char *const code, size_t len, const char *path, Tokens *tokens) {
         case '*': {
             UStr s = makeUStr(code, cursor, 1);
             Loc l = LOC(path, col, row);
-            VEC_ADD(tokens, makeToken(TT_MULT, s, l));
+            VEC_ADD(tokens, makeToken(TT_MULT, s, l, tokens->cnt));
             cursor++;
             col++;
         } break;
@@ -175,7 +180,7 @@ bool tokenize(char *const code, size_t len, const char *path, Tokens *tokens) {
             } else {
                 UStr s = makeUStr(code, cursor, 1);
                 Loc l = LOC(path, col, row);
-                VEC_ADD(tokens, makeToken(TT_DIV, s, l));
+                VEC_ADD(tokens, makeToken(TT_DIV, s, l, tokens->cnt));
                 cursor++;
                 col++;
             }
@@ -183,7 +188,7 @@ bool tokenize(char *const code, size_t len, const char *path, Tokens *tokens) {
         case '%': {
             UStr s = makeUStr(code, cursor, 1);
             Loc l = LOC(path, col, row);
-            VEC_ADD(tokens, makeToken(TT_MOD, s, l));
+            VEC_ADD(tokens, makeToken(TT_MOD, s, l, tokens->cnt));
             cursor++;
             col++;
         } break;
@@ -191,13 +196,13 @@ bool tokenize(char *const code, size_t len, const char *path, Tokens *tokens) {
             if (code[cursor + 1] == '-') {
                 UStr s = makeUStr(code, cursor, 2);
                 Loc l = LOC(path, col, row);
-                VEC_ADD(tokens, makeToken(TT_STASH, s, l));
+                VEC_ADD(tokens, makeToken(TT_STASH, s, l, tokens->cnt));
                 cursor += 2;
                 col += 2;
             } else {
                 UStr s = makeUStr(code, cursor, 1);
                 Loc l = LOC(path, col, row);
-                VEC_ADD(tokens, makeToken(TT_LT, s, l));
+                VEC_ADD(tokens, makeToken(TT_LT, s, l, tokens->cnt));
                 cursor++;
                 col++;
             }
@@ -205,56 +210,56 @@ bool tokenize(char *const code, size_t len, const char *path, Tokens *tokens) {
         case '>': {
             UStr s = makeUStr(code, cursor, 1);
             Loc l = LOC(path, col, row);
-            VEC_ADD(tokens, makeToken(TT_GT, s, l));
+            VEC_ADD(tokens, makeToken(TT_GT, s, l, tokens->cnt));
             cursor++;
             col++;
         } break;
         case '=': {
             UStr s = makeUStr(code, cursor, 1);
             Loc l = LOC(path, col, row);
-            VEC_ADD(tokens, makeToken(TT_EQ, s, l));
+            VEC_ADD(tokens, makeToken(TT_EQ, s, l, tokens->cnt));
             cursor++;
             col++;
         } break;
         case '?': {
             UStr s = makeUStr(code, cursor, 1);
             Loc l = LOC(path, col, row);
-            VEC_ADD(tokens, makeToken(TT_DUMP, s, l));
+            VEC_ADD(tokens, makeToken(TT_DUMP, s, l, tokens->cnt));
             cursor++;
             col++;
         } break;
         case '!': {
             UStr s = makeUStr(code, cursor, 1);
             Loc l = LOC(path, col, row);
-            VEC_ADD(tokens, makeToken(TT_BDUMP, s, l));
+            VEC_ADD(tokens, makeToken(TT_BDUMP, s, l, tokens->cnt));
             cursor++;
             col++;
         } break;
         case '.': {
             UStr s = makeUStr(code, cursor, 1);
             Loc l = LOC(path, col, row);
-            VEC_ADD(tokens, makeToken(TT_DUP, s, l));
+            VEC_ADD(tokens, makeToken(TT_DUP, s, l, tokens->cnt));
             cursor++;
             col++;
         } break;
         case ':': {
             UStr s = makeUStr(code, cursor, 1);
             Loc l = LOC(path, col, row);
-            VEC_ADD(tokens, makeToken(TT_2DUP, s, l));
+            VEC_ADD(tokens, makeToken(TT_2DUP, s, l, tokens->cnt));
             cursor++;
             col++;
         } break;
         case ',': {
             UStr s = makeUStr(code, cursor, 1);
             Loc l = LOC(path, col, row);
-            VEC_ADD(tokens, makeToken(TT_DROP, s, l));
+            VEC_ADD(tokens, makeToken(TT_DROP, s, l, tokens->cnt));
             cursor++;
             col++;
         } break;
         case ';': {
             UStr s = makeUStr(code, cursor, 1);
             Loc l = LOC(path, col, row);
-            VEC_ADD(tokens, makeToken(TT_SWAP, s, l));
+            VEC_ADD(tokens, makeToken(TT_SWAP, s, l, tokens->cnt));
             cursor++;
             col++;
         } break;
@@ -273,12 +278,12 @@ bool tokenize(char *const code, size_t len, const char *path, Tokens *tokens) {
             if (isdigit(code[cursor])) {
                 UStr s = parseNumberLiteral(code, &cursor);
                 Loc l = LOC(path, col, row);
-                VEC_ADD(tokens, makeToken(TT_LIT_NUMBER, s, l));
+                VEC_ADD(tokens, makeToken(TT_LIT_NUMBER, s, l, tokens->cnt));
                 col += s.len;
             } else if (isalpha(code[cursor])) {
                 UStr s = parseWord(code, &cursor);
                 Loc l = LOC(path, col, row);
-                VEC_ADD(tokens, makeToken(TT_WORD, s, l));
+                VEC_ADD(tokens, makeToken(TT_WORD, s, l, tokens->cnt));
                 col += s.len;
             } else {
                 printf("Char not handled %c\n", code[cursor]);
@@ -324,6 +329,10 @@ typedef enum {
     W_PUTD,
     W_LOOP,
     W_END,
+	W_MEM,
+	W_W_MEM,
+	W_W_MEM64,
+	W_DEREF,
     W_DO,
     W_PUTC,
     W_PRINTLN,
@@ -331,6 +340,7 @@ typedef enum {
     W_IF,
     W_ELSE,
     W_ENDIF,
+	W_AS_STR,
 } WordType;
 
 typedef struct {
@@ -338,6 +348,7 @@ typedef struct {
     OpType t;
     int op;
     int link;
+	int index;
 } Op;
 
 char *opTypeToStr(Op op) {
@@ -390,6 +401,16 @@ char *opTypeToStr(Op op) {
             return "W_ELSE";
         case W_ENDIF:
             return "W_ENDIF";
+		case W_MEM:
+			return "W_MEM";
+		case W_W_MEM:
+			return "W_W_MEM";
+		case W_W_MEM64:
+			return "W_W_MEM64";
+		case W_DEREF:
+			return "W_DEREF";
+		case W_AS_STR:
+			return "W_AS_STR";
         default:
             return "W_DEFINED";
         }
@@ -422,11 +443,16 @@ typedef struct {
     int cap;
 } UStrList;
 
+#define MAX_DEFINED 1000
 typedef struct {
     Op *data;
     int cnt;
     int cap;
     UStrList strTable;
+	UStrList definedTable;
+	int definedData[MAX_DEFINED];
+	char* mem;
+	int mp;
 } Program;
 
 Op parseBinopToken(Token t) {
@@ -448,34 +474,61 @@ Op parseBinopToken(Token t) {
     case TT_EQ:
         return (Op){.l = t.l, .t = OP_BINOP, .op = BT_EQ, .link = 0};
     default:
-        return (Op){t.l, OP_NOP, 0, 0};
+        return (Op){t.l, OP_NOP, 0, 0, t.index};
     }
-    return (Op){t.l, OP_NOP, 0, 0};
+    return (Op){t.l, OP_NOP, 0, 0, t.index};
 }
 
-Op parseWordToken(Token t) {
-    Op o = (Op){.l = t.l, .t = OP_WORD, .op = W_DEFINED, .link = 0};
+int find_defined(Program prog, Op o) {
+	UStr to_check = tokens.data[o.index].lit;
+	for (int i = 0; i < prog.definedTable.cnt; i++) {
+		UStr it = prog.definedTable.data[i];
+		//printf("> %.*s == %.*s\n", to_check.len, to_check.str, it.len, it.str);
+		if (strncmp(to_check.str, it.str, to_check.len) == 0) {
+			return i;
+		}
+	}
+	return -1;
+}
 
-    if (US_CMP(t.lit, "sout") == 0)
-        o.op = W_PUTD;
-    else if (US_CMP(t.lit, "loop") == 0)
-        o.op = W_LOOP;
-    else if (US_CMP(t.lit, "endif") == 0)
-        o.op = W_ENDIF;
-    else if (US_CMP(t.lit, "do") == 0)
-        o.op = W_DO;
-    else if (US_CMP(t.lit, "putc") == 0)
-        o.op = W_PUTC;
-    else if (US_CMP(t.lit, "println") == 0)
-        o.op = W_PRINTLN;
-    else if (US_CMP(t.lit, "print") == 0)
-        o.op = W_PRINT;
-    else if (US_CMP(t.lit, "if") == 0)
-        o.op = W_IF;
-    else if (US_CMP(t.lit, "else") == 0)
-        o.op = W_ELSE;
-    else if (US_CMP(t.lit, "end") == 0)
-        o.op = W_END;
+Op parseWordToken(Token t, Program *program) {
+    Op o = (Op){.l = t.l, .t = OP_WORD, .op = W_DEFINED, .link = 0, .index = t.index};
+
+    if (US_CMP(t.lit, "sout") == 0) {
+		o.op = W_PUTD;
+	} else if (US_CMP(t.lit, "loop") == 0) {
+		o.op = W_LOOP;
+	} else if (US_CMP(t.lit, "endif") == 0) {
+		o.op = W_ENDIF;
+	} else if (US_CMP(t.lit, "do") == 0) {
+		o.op = W_DO;
+	} else if (US_CMP(t.lit, "putc") == 0) {
+		o.op = W_PUTC;
+	} else if (US_CMP(t.lit, "println") == 0) {
+		o.op = W_PRINTLN;
+	} else if (US_CMP(t.lit, "print") == 0) {
+		o.op = W_PRINT;
+	} else if (US_CMP(t.lit, "if") == 0) {
+		o.op = W_IF;
+	} else if (US_CMP(t.lit, "else") == 0) {
+		o.op = W_ELSE;
+	} else if (US_CMP(t.lit, "end") == 0) {
+		o.op = W_END;
+	} else if (US_CMP(t.lit, "mem") == 0) {
+		o.op = W_MEM;
+	} else if (US_CMP(t.lit, "w_mem") == 0) {
+		o.op = W_W_MEM;
+	} else if (US_CMP(t.lit, "w64_mem") == 0) {
+		o.op = W_W_MEM64;
+	} else if (US_CMP(t.lit, "deref") == 0) {
+		o.op = W_DEREF;
+	} else if (US_CMP(t.lit, "as_str") == 0) {
+		o.op = W_AS_STR;
+	} else {
+		if (find_defined(*program, o) == -1) {
+			VEC_ADD(&program->definedTable, t.lit);
+		}
+	}
 
     return o;
 }
@@ -506,7 +559,7 @@ bool parse(Tokens tokens, Program *prog) {
             VEC_ADD(&prog->strTable, t.lit);
         } break;
         case TT_WORD: {
-            VEC_ADD(prog, parseWordToken(t));
+            VEC_ADD(prog, parseWordToken(t, prog));
         } break;
         case TT_DUMP: {
             Op o = (Op){.l = t.l, .t = OP_DUMP, .op = 0, .link = 0};
@@ -549,6 +602,13 @@ bool parse(Tokens tokens, Program *prog) {
     l.row++;
     Op o = (Op){.l = l, .t = OP_NOP, .op = 0, .link = 0};
     VEC_ADD(prog, o);
+
+	if (DEBUG) {
+		for (int i = 0; i < prog->definedTable.cnt; i++) {
+			printf("[%d] %.*s\n", i,  prog->definedTable.data[i].len, prog->definedTable.data[i].str);
+		}
+	}
+
     return false;
 }
 // EndParser
@@ -755,6 +815,14 @@ int pop(int *stack, int *sp) {
     return stack[--(*sp)];
 }
 
+long pop64(int* stack, int *sp) {
+	int val_h = pop(stack, sp);
+	int val_l = pop(stack, sp);
+
+	long val = ((long)val_h << 32) | ((unsigned int)val_l);
+	return val;
+}
+
 void tryPush(int *stack, int *sp, int operand, Op o) {
     if (*sp + 1 >= MAX_STACK)
         error(ERR_OVERFLOW, o, "Can't push literal number %d\n", operand);
@@ -793,9 +861,93 @@ void interpetBinop(int *stack, int *sp, Op o) {
     }
 }
 
-void interpetWord(int *stack, int *sp, int *ip, Op o, Program prog) {
+bool is_libc_word(Op o) {
+	return US_CMP(tokens.data[o.index].lit, "open") == 0
+ 		|| US_CMP(tokens.data[o.index].lit, "close") == 0
+ 		|| US_CMP(tokens.data[o.index].lit, "malloc") == 0
+ 		|| US_CMP(tokens.data[o.index].lit, "free") == 0
+ 		|| US_CMP(tokens.data[o.index].lit, "read") == 0
+ 		|| US_CMP(tokens.data[o.index].lit, "exit") == 0
+ 		|| US_CMP(tokens.data[o.index].lit, "lseek") == 0;
+}
+
+void interpet_libc_call(int *stack, int *sp, int *ip, Op o, Program* prog) {
+
+	_ ip;
+
+	UStr to_check = tokens.data[o.index].lit;
+	if (US_CMP(to_check, "open") == 0) {
+		int path_id = pop(stack, sp);
+		int mode = pop(stack, sp);
+
+		UStr path = prog->strTable.data[path_id];
+
+		char path_cstr[path.len+1];
+		snprintf(path_cstr, path.len + 1, "%.*s", path.len, path.str);
+
+		int fd = open(path_cstr, mode);
+		tryPush(stack, sp, fd, o);
+	} else if(US_CMP(to_check, "close") == 0) {
+		int fd = pop(stack, sp);
+		
+		close(fd);
+	} else if(US_CMP(to_check, "lseek") == 0) {
+		int fd = pop(stack, sp);
+		int off = pop(stack, sp);
+		int whence = pop(stack, sp);
+
+		off_t i = lseek(fd, off, whence);
+		
+		tryPush(stack, sp, i, o);
+	} else if(US_CMP(to_check, "malloc") == 0) {
+		int size = pop(stack, sp);
+
+		long addr = (long)malloc(size);
+		int h = (int)(addr >> 32);
+		int l = (int)(addr & 0xFFFFFFFF);
+
+		tryPush(stack, sp, l, o);
+		tryPush(stack, sp, h, o);
+
+	} else if(US_CMP(to_check, "read") == 0) {
+		int fd = pop(stack, sp);
+		int val_h = pop(stack, sp);
+		int val_l = pop(stack, sp);
+		int size = pop(stack, sp);
+
+		long addr = ((long)val_h << 32) | ((unsigned int)val_l);
+
+		int res = read(fd, (void*)addr, size);
+		if (res != -1) {
+		}
+	} else if(US_CMP(to_check, "free") == 0) {
+		int val_h = pop(stack, sp);
+		int val_l = pop(stack, sp);
+
+		long addr = ((long)val_h << 32) | ((unsigned int)val_l);
+		free((void*)addr);
+	} else if(US_CMP(to_check, "exit") == 0) {
+		int code = pop(stack, sp);
+		exit(code);
+	}
+}
+
+void interpetWord(int *stack, int *sp, int *ip, Op o, Program* prog) {
     switch (o.op) {
     case W_DEFINED: {
+		if (is_libc_word(o)) {
+			interpet_libc_call(stack, sp, ip, o, prog);
+		} else if (US_CMP(tokens.data[o.index].lit, "i32") == 0) {
+			tryPush(stack, sp, 4, o);
+		} else if (US_CMP(tokens.data[o.index].lit, "i64") == 0) {
+			tryPush(stack, sp, 8, o);
+		} else {
+			int def_id = find_defined(*prog, o);
+			if (def_id == -1) {
+				printf("Something went wrong!\n");
+			}
+			tryPush(stack, sp, def_id, o);
+		}
         *ip += 1;
     } break;
     case W_PUTD: {
@@ -827,17 +979,17 @@ void interpetWord(int *stack, int *sp, int *ip, Op o, Program prog) {
     case W_PRINTLN: {
         canPopAmt(*sp, 1, o);
         int top = pop(stack, sp);
-        if (prog.strTable.cnt == 0)
+        if (prog->strTable.cnt == 0)
             error(ERR_NO_STR, o, "`println` or `print` requires an string index. Be sure to push a string before using it.\n");
-        printf("%.*s\n", VEC_GET(prog.strTable, top).len, VEC_GET(prog.strTable, top).str);
+        printf("%.*s\n", VEC_GET(prog->strTable, top).len, VEC_GET(prog->strTable, top).str);
         *ip += 1;
     } break;
     case W_PRINT: {
         canPopAmt(*sp, 1, o);
         int top = pop(stack, sp);
-        if (prog.strTable.cnt == 0)
+        if (prog->strTable.cnt == 0)
             error(ERR_NO_STR, o, "`println` or `print` requires an string index. Be sure to push a string before using it.\n");
-        printf("%.*s", prog.strTable.data[top].len, prog.strTable.data[top].str);
+        printf("%.*s", prog->strTable.data[top].len, prog->strTable.data[top].str);
         *ip += 1;
 
     } break;
@@ -855,7 +1007,70 @@ void interpetWord(int *stack, int *sp, int *ip, Op o, Program prog) {
     case W_ENDIF: {
         *ip += 1;
     } break;
-    }
+	case W_MEM: {
+		int defined_id = pop(stack, sp);
+		int amt = pop(stack, sp);
+		prog->definedData[defined_id] = prog->mp;
+		prog->mp += amt;
+		*ip += 1;
+	} break;
+	case W_W_MEM: {
+		int defined_id = pop(stack, sp);
+		int val = pop(stack, sp);
+		int off = prog->definedData[defined_id];
+
+		memcpy(prog->mem + off, &val, sizeof(int));
+
+		*ip += 1;
+	} break;
+	case W_W_MEM64: {
+		int defined_id = pop(stack, sp);
+		int val_h = pop(stack, sp);
+		int val_l = pop(stack, sp);
+		int off = prog->definedData[defined_id];
+
+
+		long val = ((long)val_h << 32) | ((unsigned int)val_l);
+
+		memcpy(prog->mem + off, &val, sizeof(long));
+
+		*ip += 1;
+	} break;
+
+	case W_DEREF: {
+		int defined_id = pop(stack, sp);
+		int size = pop(stack, sp);
+		int off = prog->definedData[defined_id];
+
+		if (size == 4) {
+			int at;
+			memcpy(&at, prog->mem + off, size);
+			tryPush(stack, sp, at, o);
+		} else if (size == 8) {
+			long at;
+			memcpy(&at, prog->mem + off, size);
+			int h = (int)(at >> 32);
+			int l = (int)(at & 0xFFFFFFFF);
+	
+			tryPush(stack, sp, l, o);
+			tryPush(stack, sp, h, o);
+		}
+
+		*ip += 1;
+	} break;
+	case W_AS_STR: {
+		long ptr = pop64(stack, sp);	
+		int size = pop(stack, sp);
+
+		tryPush(stack, sp, prog->strTable.cnt, o);
+		VEC_ADD(&prog->strTable, makeUStr((char*)ptr, 0, size));
+
+		*ip += 1;
+	} break;
+	default:
+		printf("Word not handled %s %.*s\n", opTypeToStr(o), tokens.data[o.index].lit.len, tokens.data[o.index].lit.str);
+		exit(1);
+	}
 }
 
 bool interpet(Program prog) {
@@ -878,7 +1093,7 @@ bool interpet(Program prog) {
             ip++;
         } break;
         case OP_WORD: {
-            interpetWord(stack, &sp, &ip, o, prog);
+            interpetWord(stack, &sp, &ip, o, &prog);
         } break;
         case OP_DUMP: {
             printf("> Stack Dump:\n");
@@ -1008,11 +1223,11 @@ int main(int argc, char **argv) {
 
     bench b = {0};
     BENCH_START(&b);
-    Tokens tokens = {0};
     tokenize(code, len, path, &tokens);
     MEASURE(&b, "Tokenize");
 
     Program prog = {0};
+	prog.mem = malloc(4096);
     parse(tokens, &prog);
     MEASURE(&b, "Parse tokens");
 
@@ -1031,6 +1246,7 @@ int main(int argc, char **argv) {
     VEC_FREE(tokens);
 
     free(code);
+	free(prog.mem);
 
     return 0;
 }

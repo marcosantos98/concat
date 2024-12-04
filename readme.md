@@ -43,3 +43,28 @@
 | if | if start | t != 0 | 1 |
 | else | execute body if not true | - | 0 |
 | endif | end if body | - | 0 |
+
+### Memory:
+
+- mp: memory pointer
+
+| Syntax | Job | Memory manipulation | Consume n |
+| --- | --- | --- | --- |
+| mem | Assign defined word to pointer in memory with size | mp += size | 1 |
+| w_mem | Write value into word previously defined | mem @ word = value | 2 |
+| w64_mem | Write 64bit value into world previously defined | mem @ word = value | 3 |
+| deref | Dereference word to stack with given size | t = * word as size | i32 ? 2 : 3 |
+| as_str | Takes ptr and casts as string with size | t = strIdx | 2 |
+
+### Current LIBC bindings
+
+| name | Return | Consume |
+| --- | --- | --- |
+| open | fd | 3 (path, mode, open keyword) |
+| lseek | size | 4 (SEEK_X, off, fd, lseed keyword) |
+| read | none (TODO) | 4 (fd, ptr, size, read keyword) |
+| malloc | ptr as two i32 | 2 (size, read keyword) |
+| free | none | 2 (ptr, read keyword) |
+| close | none | 2 (fd, close keyword) |
+| exit | none | 2 (code, exit keyword) |
+
