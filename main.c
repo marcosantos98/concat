@@ -1,9 +1,9 @@
 #include <assert.h>
-#include <string.h>
 #include <ctype.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <fcntl.h>
+#include <string.h>
 #include <unistd.h>
 
 #include <bench.h>
@@ -11,15 +11,16 @@
 #include <strb.h>
 #include <vector.h>
 
-#define DEBUG 0
-
-#define MEASURE(bPtr, strmsg)            \
-    do {                                 \
-        if (DEBUG)                       \
-            BENCH_MEASURE(bPtr, strmsg); \
-    } while (0)
-
 #define _ (void)
+
+#ifdef DEBUG
+#define MEASURE(bPtr, strmsg)        \
+    do {                             \
+        BENCH_MEASURE(bPtr, strmsg); \
+    } while (0)
+#else
+#define MEASURE(bPtr, strmsg)
+#endif
 
 // StartTokenizer
 typedef enum {
@@ -72,7 +73,7 @@ typedef struct {
     TokenType t;
     Loc l;
     UStr lit;
-	int index;
+    int index;
 } Token;
 
 typedef struct {
@@ -130,6 +131,7 @@ size_t parseComment(const char *code, size_t cursor) {
 }
 
 bool tokenize(char *const code, size_t len, const char *path, Tokens *tokens) {
+
     size_t cursor = 0;
 
     int col = 1;
@@ -329,10 +331,10 @@ typedef enum {
     W_PUTD,
     W_LOOP,
     W_END,
-	W_MEM,
-	W_W_MEM,
-	W_W_MEM64,
-	W_DEREF,
+    W_MEM,
+    W_W_MEM,
+    W_W_MEM64,
+    W_DEREF,
     W_DO,
     W_PUTC,
     W_PRINTLN,
@@ -340,8 +342,8 @@ typedef enum {
     W_IF,
     W_ELSE,
     W_ENDIF,
-	W_AS_STR,
-	W_DEF,
+    W_AS_STR,
+    W_DEF,
 } WordType;
 
 typedef struct {
@@ -349,7 +351,7 @@ typedef struct {
     OpType t;
     int op;
     int link;
-	int index;
+    int index;
 } Op;
 
 char *opTypeToStr(Op op) {
@@ -402,18 +404,18 @@ char *opTypeToStr(Op op) {
             return "W_ELSE";
         case W_ENDIF:
             return "W_ENDIF";
-		case W_MEM:
-			return "W_MEM";
-		case W_W_MEM:
-			return "W_W_MEM";
-		case W_W_MEM64:
-			return "W_W_MEM64";
-		case W_DEREF:
-			return "W_DEREF";
-		case W_AS_STR:
-			return "W_AS_STR";
-		case W_DEF:
-			return "W_DEF";
+        case W_MEM:
+            return "W_MEM";
+        case W_W_MEM:
+            return "W_W_MEM";
+        case W_W_MEM64:
+            return "W_W_MEM64";
+        case W_DEREF:
+            return "W_DEREF";
+        case W_AS_STR:
+            return "W_AS_STR";
+        case W_DEF:
+            return "W_DEF";
         default:
             return "W_DEFINED";
         }
@@ -452,11 +454,11 @@ typedef struct {
     int cnt;
     int cap;
     UStrList strTable;
-	UStrList definedTable;
-	int definedData[MAX_DEFINED];
-	int constData[MAX_DEFINED];
-	char* mem;
-	int mp;
+    UStrList definedTable;
+    int definedData[MAX_DEFINED];
+    int constData[MAX_DEFINED];
+    char *mem;
+    int mp;
 } Program;
 
 Op parseBinopToken(Token t) {
@@ -484,57 +486,57 @@ Op parseBinopToken(Token t) {
 }
 
 int find_defined(Program prog, Op o) {
-	UStr to_check = tokens.data[o.index].lit;
-	for (int i = 0; i < prog.definedTable.cnt; i++) {
-		UStr it = prog.definedTable.data[i];
-		//printf("> %.*s == %.*s\n", to_check.len, to_check.str, it.len, it.str);
-		if (strncmp(to_check.str, it.str, to_check.len) == 0) {
-			return i;
-		}
-	}
-	return -1;
+    UStr to_check = tokens.data[o.index].lit;
+    for (int i = 0; i < prog.definedTable.cnt; i++) {
+        UStr it = prog.definedTable.data[i];
+        // printf("> %.*s == %.*s\n", to_check.len, to_check.str, it.len, it.str);
+        if (strncmp(to_check.str, it.str, to_check.len) == 0) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 Op parseWordToken(Token t, Program *program) {
     Op o = (Op){.l = t.l, .t = OP_WORD, .op = W_DEFINED, .link = 0, .index = t.index};
 
     if (US_CMP(t.lit, "sout") == 0) {
-		o.op = W_PUTD;
-	} else if (US_CMP(t.lit, "loop") == 0) {
-		o.op = W_LOOP;
-	} else if (US_CMP(t.lit, "endif") == 0) {
-		o.op = W_ENDIF;
-	} else if (US_CMP(t.lit, "do") == 0) {
-		o.op = W_DO;
-	} else if (US_CMP(t.lit, "putc") == 0) {
-		o.op = W_PUTC;
-	} else if (US_CMP(t.lit, "println") == 0) {
-		o.op = W_PRINTLN;
-	} else if (US_CMP(t.lit, "print") == 0) {
-		o.op = W_PRINT;
-	} else if (US_CMP(t.lit, "if") == 0) {
-		o.op = W_IF;
-	} else if (US_CMP(t.lit, "else") == 0) {
-		o.op = W_ELSE;
-	} else if (US_CMP(t.lit, "end") == 0) {
-		o.op = W_END;
-	} else if (US_CMP(t.lit, "mem") == 0) {
-		o.op = W_MEM;
-	} else if (US_CMP(t.lit, "w_mem") == 0) {
-		o.op = W_W_MEM;
-	} else if (US_CMP(t.lit, "w64_mem") == 0) {
-		o.op = W_W_MEM64;
-	} else if (US_CMP(t.lit, "deref") == 0) {
-		o.op = W_DEREF;
-	} else if (US_CMP(t.lit, "as_str") == 0) {
-		o.op = W_AS_STR;
-	} else if (US_CMP(t.lit, "def") == 0) {
-		o.op = W_DEF;
-	} else {
-		if (find_defined(*program, o) == -1) {
-			VEC_ADD(&program->definedTable, t.lit);
-		}
-	}
+        o.op = W_PUTD;
+    } else if (US_CMP(t.lit, "loop") == 0) {
+        o.op = W_LOOP;
+    } else if (US_CMP(t.lit, "endif") == 0) {
+        o.op = W_ENDIF;
+    } else if (US_CMP(t.lit, "do") == 0) {
+        o.op = W_DO;
+    } else if (US_CMP(t.lit, "putc") == 0) {
+        o.op = W_PUTC;
+    } else if (US_CMP(t.lit, "println") == 0) {
+        o.op = W_PRINTLN;
+    } else if (US_CMP(t.lit, "print") == 0) {
+        o.op = W_PRINT;
+    } else if (US_CMP(t.lit, "if") == 0) {
+        o.op = W_IF;
+    } else if (US_CMP(t.lit, "else") == 0) {
+        o.op = W_ELSE;
+    } else if (US_CMP(t.lit, "end") == 0) {
+        o.op = W_END;
+    } else if (US_CMP(t.lit, "mem") == 0) {
+        o.op = W_MEM;
+    } else if (US_CMP(t.lit, "w_mem") == 0) {
+        o.op = W_W_MEM;
+    } else if (US_CMP(t.lit, "w64_mem") == 0) {
+        o.op = W_W_MEM64;
+    } else if (US_CMP(t.lit, "deref") == 0) {
+        o.op = W_DEREF;
+    } else if (US_CMP(t.lit, "as_str") == 0) {
+        o.op = W_AS_STR;
+    } else if (US_CMP(t.lit, "def") == 0) {
+        o.op = W_DEF;
+    } else {
+        if (find_defined(*program, o) == -1) {
+            VEC_ADD(&program->definedTable, t.lit);
+        }
+    }
 
     return o;
 }
@@ -609,11 +611,11 @@ bool parse(Tokens tokens, Program *prog) {
     Op o = (Op){.l = l, .t = OP_NOP, .op = 0, .link = 0};
     VEC_ADD(prog, o);
 
-	if (DEBUG) {
-		for (int i = 0; i < prog->definedTable.cnt; i++) {
-			printf("[%d] %.*s\n", i,  prog->definedTable.data[i].len, prog->definedTable.data[i].str);
-		}
-	}
+#ifdef DEBUG
+    for (int i = 0; i < prog->definedTable.cnt; i++) {
+        printf("[%d] %.*s\n", i, prog->definedTable.data[i].len, prog->definedTable.data[i].str);
+    }
+#endif
 
     return false;
 }
@@ -821,12 +823,12 @@ int pop(int *stack, int *sp) {
     return stack[--(*sp)];
 }
 
-long pop64(int* stack, int *sp) {
-	int val_h = pop(stack, sp);
-	int val_l = pop(stack, sp);
+long pop64(int *stack, int *sp) {
+    int val_h = pop(stack, sp);
+    int val_l = pop(stack, sp);
 
-	long val = ((long)val_h << 32) | ((unsigned int)val_l);
-	return val;
+    long val = ((long)val_h << 32) | ((unsigned int)val_l);
+    return val;
 }
 
 void tryPush(int *stack, int *sp, int operand, Op o) {
@@ -868,96 +870,90 @@ void interpetBinop(int *stack, int *sp, Op o) {
 }
 
 bool is_libc_word(Op o) {
-	return US_CMP(tokens.data[o.index].lit, "open") == 0
- 		|| US_CMP(tokens.data[o.index].lit, "close") == 0
- 		|| US_CMP(tokens.data[o.index].lit, "malloc") == 0
- 		|| US_CMP(tokens.data[o.index].lit, "free") == 0
- 		|| US_CMP(tokens.data[o.index].lit, "read") == 0
- 		|| US_CMP(tokens.data[o.index].lit, "exit") == 0
- 		|| US_CMP(tokens.data[o.index].lit, "lseek") == 0;
+    return US_CMP(tokens.data[o.index].lit, "open") == 0 || US_CMP(tokens.data[o.index].lit, "close") == 0 || US_CMP(tokens.data[o.index].lit, "malloc") == 0 || US_CMP(tokens.data[o.index].lit, "free") == 0 || US_CMP(tokens.data[o.index].lit, "read") == 0 || US_CMP(tokens.data[o.index].lit, "exit") == 0 || US_CMP(tokens.data[o.index].lit, "lseek") == 0;
 }
 
-void interpet_libc_call(int *stack, int *sp, int *ip, Op o, Program* prog) {
+void interpet_libc_call(int *stack, int *sp, int *ip, Op o, Program *prog) {
 
-	_ ip;
+    _ ip;
 
-	UStr to_check = tokens.data[o.index].lit;
-	if (US_CMP(to_check, "open") == 0) {
-		int path_id = pop(stack, sp);
-		int mode = pop(stack, sp);
+    UStr to_check = tokens.data[o.index].lit;
+    if (US_CMP(to_check, "open") == 0) {
+        int path_id = pop(stack, sp);
+        int mode = pop(stack, sp);
 
-		UStr path = prog->strTable.data[path_id];
+        UStr path = prog->strTable.data[path_id];
 
-		char path_cstr[path.len+1];
-		snprintf(path_cstr, path.len + 1, "%.*s", path.len, path.str);
+        char path_cstr[path.len + 1];
+        snprintf(path_cstr, path.len + 1, "%.*s", path.len, path.str);
 
-		int fd = open(path_cstr, mode);
-		tryPush(stack, sp, fd, o);
-	} else if(US_CMP(to_check, "close") == 0) {
-		int fd = pop(stack, sp);
-		
-		close(fd);
-	} else if(US_CMP(to_check, "lseek") == 0) {
-		int fd = pop(stack, sp);
-		int off = pop(stack, sp);
-		int whence = pop(stack, sp);
+        int fd = open(path_cstr, mode);
+        tryPush(stack, sp, fd, o);
+    } else if (US_CMP(to_check, "close") == 0) {
+        int fd = pop(stack, sp);
 
-		off_t i = lseek(fd, off, whence);
-		
-		tryPush(stack, sp, i, o);
-	} else if(US_CMP(to_check, "malloc") == 0) {
-		int size = pop(stack, sp);
+        close(fd);
+    } else if (US_CMP(to_check, "lseek") == 0) {
+        int fd = pop(stack, sp);
+        int off = pop(stack, sp);
+        int whence = pop(stack, sp);
 
-		long addr = (long)malloc(size);
-		int h = (int)(addr >> 32);
-		int l = (int)(addr & 0xFFFFFFFF);
+        off_t i = lseek(fd, off, whence);
 
-		tryPush(stack, sp, l, o);
-		tryPush(stack, sp, h, o);
+        tryPush(stack, sp, i, o);
+    } else if (US_CMP(to_check, "malloc") == 0) {
+        int size = pop(stack, sp);
 
-	} else if(US_CMP(to_check, "read") == 0) {
-		int fd = pop(stack, sp);
-		int val_h = pop(stack, sp);
-		int val_l = pop(stack, sp);
-		int size = pop(stack, sp);
+        long addr = (long)malloc(size);
+        int h = (int)(addr >> 32);
+        int l = (int)(addr & 0xFFFFFFFF);
 
-		long addr = ((long)val_h << 32) | ((unsigned int)val_l);
+        tryPush(stack, sp, l, o);
+        tryPush(stack, sp, h, o);
 
-		int res = read(fd, (void*)addr, size);
-		if (res != -1) {
-		}
-	} else if(US_CMP(to_check, "free") == 0) {
-		int val_h = pop(stack, sp);
-		int val_l = pop(stack, sp);
+    } else if (US_CMP(to_check, "read") == 0) {
+        int fd = pop(stack, sp);
+        int val_h = pop(stack, sp);
+        int val_l = pop(stack, sp);
+        int size = pop(stack, sp);
 
-		long addr = ((long)val_h << 32) | ((unsigned int)val_l);
-		free((void*)addr);
-	} else if(US_CMP(to_check, "exit") == 0) {
-		int code = pop(stack, sp);
-		exit(code);
-	}
+        long addr = ((long)val_h << 32) | ((unsigned int)val_l);
+
+        int res = read(fd, (void *)addr, size);
+        if (res != -1) {
+        }
+    } else if (US_CMP(to_check, "free") == 0) {
+        int val_h = pop(stack, sp);
+        int val_l = pop(stack, sp);
+
+        long addr = ((long)val_h << 32) | ((unsigned int)val_l);
+        free((void *)addr);
+    } else if (US_CMP(to_check, "exit") == 0) {
+        int code = pop(stack, sp);
+        exit(code);
+    }
 }
 
-void interpetWord(int *stack, int *sp, int *ip, Op o, Program* prog) {
+void interpetWord(int *stack, int *sp, int *ip, Op o, Program *prog) {
     switch (o.op) {
     case W_DEFINED: {
-		if (is_libc_word(o)) {
-			interpet_libc_call(stack, sp, ip, o, prog);
-		} else if (US_CMP(tokens.data[o.index].lit, "i32") == 0) {
-			tryPush(stack, sp, 4, o);
-		} else if (US_CMP(tokens.data[o.index].lit, "i64") == 0) {
-			tryPush(stack, sp, 8, o);
-		} else {
-			int def_id = find_defined(*prog, o);
-			if (def_id == -1) {
-				printf("Something went wrong!\n");
-			}
-			if (prog->constData[def_id] != -1) {
-				tryPush(stack, sp, prog->constData[def_id], o);
-			} else {
-				tryPush(stack, sp, def_id, o);
-			}
-		}
+        if (is_libc_word(o)) {
+            interpet_libc_call(stack, sp, ip, o, prog);
+        } else if (US_CMP(tokens.data[o.index].lit, "i32") == 0) {
+            tryPush(stack, sp, 4, o);
+        } else if (US_CMP(tokens.data[o.index].lit, "i64") == 0) {
+            tryPush(stack, sp, 8, o);
+        } else {
+            int def_id = find_defined(*prog, o);
+            if (def_id == -1) {
+                printf("Something went wrong!\n");
+            }
+            if (prog->constData[def_id] != -1) {
+                tryPush(stack, sp, prog->constData[def_id], o);
+            } else {
+                tryPush(stack, sp, def_id, o);
+            }
+        }
         *ip += 1;
     } break;
     case W_PUTD: {
@@ -1017,78 +1013,77 @@ void interpetWord(int *stack, int *sp, int *ip, Op o, Program* prog) {
     case W_ENDIF: {
         *ip += 1;
     } break;
-	case W_MEM: {
-		int defined_id = pop(stack, sp);
-		int amt = pop(stack, sp);
-		prog->definedData[defined_id] = prog->mp;
-		prog->mp += amt;
-		*ip += 1;
-	} break;
-	case W_W_MEM: {
-		int defined_id = pop(stack, sp);
-		int val = pop(stack, sp);
-		int off = prog->definedData[defined_id];
+    case W_MEM: {
+        int defined_id = pop(stack, sp);
+        int amt = pop(stack, sp);
+        prog->definedData[defined_id] = prog->mp;
+        prog->mp += amt;
+        *ip += 1;
+    } break;
+    case W_W_MEM: {
+        int defined_id = pop(stack, sp);
+        int val = pop(stack, sp);
+        int off = prog->definedData[defined_id];
 
-		memcpy(prog->mem + off, &val, sizeof(int));
+        memcpy(prog->mem + off, &val, sizeof(int));
 
-		*ip += 1;
-	} break;
-	case W_W_MEM64: {
-		int defined_id = pop(stack, sp);
-		int val_h = pop(stack, sp);
-		int val_l = pop(stack, sp);
-		int off = prog->definedData[defined_id];
+        *ip += 1;
+    } break;
+    case W_W_MEM64: {
+        int defined_id = pop(stack, sp);
+        int val_h = pop(stack, sp);
+        int val_l = pop(stack, sp);
+        int off = prog->definedData[defined_id];
 
+        long val = ((long)val_h << 32) | ((unsigned int)val_l);
 
-		long val = ((long)val_h << 32) | ((unsigned int)val_l);
+        memcpy(prog->mem + off, &val, sizeof(long));
 
-		memcpy(prog->mem + off, &val, sizeof(long));
+        *ip += 1;
+    } break;
 
-		*ip += 1;
-	} break;
+    case W_DEREF: {
+        int defined_id = pop(stack, sp);
+        int size = pop(stack, sp);
+        int off = prog->definedData[defined_id];
 
-	case W_DEREF: {
-		int defined_id = pop(stack, sp);
-		int size = pop(stack, sp);
-		int off = prog->definedData[defined_id];
+        if (size == 4) {
+            int at;
+            memcpy(&at, prog->mem + off, size);
+            tryPush(stack, sp, at, o);
+        } else if (size == 8) {
+            long at;
+            memcpy(&at, prog->mem + off, size);
+            int h = (int)(at >> 32);
+            int l = (int)(at & 0xFFFFFFFF);
 
-		if (size == 4) {
-			int at;
-			memcpy(&at, prog->mem + off, size);
-			tryPush(stack, sp, at, o);
-		} else if (size == 8) {
-			long at;
-			memcpy(&at, prog->mem + off, size);
-			int h = (int)(at >> 32);
-			int l = (int)(at & 0xFFFFFFFF);
-	
-			tryPush(stack, sp, l, o);
-			tryPush(stack, sp, h, o);
-		}
+            tryPush(stack, sp, l, o);
+            tryPush(stack, sp, h, o);
+        }
 
-		*ip += 1;
-	} break;
-	case W_AS_STR: {
-		long ptr = pop64(stack, sp);	
-		int size = pop(stack, sp);
+        *ip += 1;
+    } break;
+    case W_AS_STR: {
+        long ptr = pop64(stack, sp);
+        int size = pop(stack, sp);
 
-		tryPush(stack, sp, prog->strTable.cnt, o);
-		VEC_ADD(&prog->strTable, makeUStr((char*)ptr, 0, size));
+        tryPush(stack, sp, prog->strTable.cnt, o);
+        VEC_ADD(&prog->strTable, makeUStr((char *)ptr, 0, size));
 
-		*ip += 1;
-	} break;
-	case W_DEF: {
-		int defined_id = pop(stack, sp);
-		int val = pop(stack, sp);
+        *ip += 1;
+    } break;
+    case W_DEF: {
+        int defined_id = pop(stack, sp);
+        int val = pop(stack, sp);
 
-		//fixme: Dont allow redefinition
-		prog->constData[defined_id] = val;
-		*ip += 1;
-	} break;
-	default:
-		printf("Word not handled %s %.*s\n", opTypeToStr(o), tokens.data[o.index].lit.len, tokens.data[o.index].lit.str);
-		exit(1);
-	}
+        // fixme: Dont allow redefinition
+        prog->constData[defined_id] = val;
+        *ip += 1;
+    } break;
+    default:
+        printf("Word not handled %s %.*s\n", opTypeToStr(o), tokens.data[o.index].lit.len, tokens.data[o.index].lit.str);
+        exit(1);
+    }
 }
 
 bool interpet(Program prog) {
@@ -1196,15 +1191,13 @@ bool interpet(Program prog) {
 }
 
 void printOps(Program prog) {
-    if (DEBUG) {
-        for (int i = 0; i < prog.cnt; i++) {
-            printf("[%d] OP: %s\n", i, opTypeToStr(prog.data[i]));
-            printf("    > operand: %d\n", prog.data[i].op);
-            printf("    > link: %d\n", prog.data[i].link);
-            printf("    > loc: ");
-            printloc(prog.data[i].l);
-            printf("\n");
-        }
+    for (int i = 0; i < prog.cnt; i++) {
+        printf("[%d] OP: %s\n", i, opTypeToStr(prog.data[i]));
+        printf("    > operand: %d\n", prog.data[i].op);
+        printf("    > link: %d\n", prog.data[i].link);
+        printf("    > loc: ");
+        printloc(prog.data[i].l);
+        printf("\n");
     }
 }
 
@@ -1245,12 +1238,14 @@ int main(int argc, char **argv) {
     MEASURE(&b, "Tokenize");
 
     Program prog = {0};
-	memset(prog.constData, -1, sizeof(int) * MAX_DEFINED);
-	prog.mem = malloc(4096);
+    memset(prog.constData, -1, sizeof(int) * MAX_DEFINED);
+    prog.mem = malloc(4096);
     parse(tokens, &prog);
     MEASURE(&b, "Parse tokens");
 
+#ifdef DEBUG
     printOps(prog);
+#endif
 
     BENCH_START(&b);
     controlFlowLink(&prog);
@@ -1265,7 +1260,7 @@ int main(int argc, char **argv) {
     VEC_FREE(tokens);
 
     free(code);
-	free(prog.mem);
+    free(prog.mem);
 
     return 0;
 }

@@ -1,5 +1,5 @@
 CFLAGS=-Wextra -Wall -Werror 
-DEBUG_CFLAGS=-ggdb -fsanitize=address
+DEBUG_CFLAGS=-ggdb -fsanitize=address -DDEBUG
 
 all:
 	cc -o main main.c $(CFLAGS) -I./cutils
