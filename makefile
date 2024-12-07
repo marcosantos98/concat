@@ -6,3 +6,6 @@ all:
 
 debug:
 	cc -o main main.c $(CFLAGS) $(DEBUG_CFLAGS) -I./cutils
+
+release:
+	cc -O3 -o main main.c -I./cutils
