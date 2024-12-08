@@ -1,4 +1,6 @@
-i32 ptr_mem mem
+4 i64 def
 
-10 ptr_mem w_mem
-i32 ptr_mem deref sout 10 putc
+i64 ptr_mem mem
+
+10 ptr_mem w64_mem
+i64 ptr_mem deref sout 10 putc

@@ -3,6 +3,8 @@
 0 SEEK_SET def
 2 SEEK_END def
 
+8 i64 def
+
 i64 fd mem 
 i64 size mem
 i64 buf mem
@@ -13,10 +15,10 @@ O_RONLY "./test.txt" open . 0 ; < if
 	"Failed to open file!" println
 	1 exit
 else
-	fd w_mem
+	fd w64_mem
 endif
 
-SEEK_END 0 i64 fd deref lseek size w_mem 
+SEEK_END 0 i64 fd deref lseek size w64_mem 
 SEEK_SET 0 i64 fd deref lseek ,
 
 i64 size deref malloc buf w64_mem

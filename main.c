@@ -2,6 +2,7 @@
 #include <ctype.h>
 #include <fcntl.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,7 +36,7 @@
 static char temp_buf[8 * KB] = {0};
 static size_t temp_ptr = 0;
 
-size_t cstr_cpy(char const *src, size_t len) {
+size_t cstr_cpy(void *src, size_t len) {
     size_t at = temp_ptr;
     memcpy(temp_buf + temp_ptr, src, len);
     temp_ptr += len + 1;
@@ -353,7 +354,7 @@ static_assert(W_COUNT == 17, "Implement newly added IntrinsicType");
 typedef struct {
     Loc l;
     OpType t;
-    int op;
+    long op;
     int link;
     int index;
 } Op;
@@ -636,6 +637,173 @@ bool parse(Tokens tokens, VM *vm) {
 }
 // ;parser
 
+// :defined
+bool is_intrinsic(Op o, IntrinsicType t) {
+    return o.t == OP_INTRINSIC && (IntrinsicType)o.op == t;
+}
+
+void print_operations(VM vm) {
+    for (int i = 0; i < vm.prog.cnt; i++) {
+        printf("[%d] OP: %s\n", i, op_to_str(vm.prog.data[i]));
+        printf("    > operand: %ld\n", vm.prog.data[i].op);
+        printf("    > link: %d\n", vm.prog.data[i].link);
+        printf("    > loc: ");
+        printloc(vm.prog.data[i].l);
+        printf("\n");
+        printf("    > repr: %s\n", CSTR(tokens.data[vm.prog.data[i].index].lit_ptr));
+    }
+}
+
+#define FOR_LIST(list) for (int i = 0; i < (list).cnt; i++)
+
+bool is_libc_word(Op o) {
+    return is_intrinsic(o, W_DEFINED) && (str_eq(tokens.data[o.index].lit_ptr, "open") || str_eq(tokens.data[o.index].lit_ptr, "close") || str_eq(tokens.data[o.index].lit_ptr, "malloc") || str_eq(tokens.data[o.index].lit_ptr, "free") || str_eq(tokens.data[o.index].lit_ptr, "read") || str_eq(tokens.data[o.index].lit_ptr, "exit") || str_eq(tokens.data[o.index].lit_ptr, "lseek"));
+}
+
+#define TOKEN_LIT(index) CSTR(VEC_GET(tokens, (index)).lit_ptr)
+typedef struct {
+    int index;
+    long val;
+    OpType type;
+    size_t lit_ptr;
+    int link;
+} DefineData;
+List(Defines, DefineData);
+
+int find_previous_defined(Defines defines, size_t lit_ptr) {
+    FOR_LIST(defines) {
+        DefineData data = VEC_GET(defines, i);
+        if (str_eq(data.lit_ptr, CSTR(lit_ptr))) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void delete_op(Program *prog, int index) {
+    assert((index >= 0 && index < prog->cnt) && "Invalid index");
+    int amount = (prog->cnt - index - 1) * sizeof(Op);
+    void *dest = prog->data + index;    // data[index]
+    void *src = prog->data + index + 1; // data[index++]
+    memmove(dest, src, amount);
+    prog->cnt--;
+}
+
+bool replace_defined(VM *vm) {
+    int ip = 0;
+
+    Defines defines = {0};
+
+    while (VEC_GET(vm->prog, ip).t != OP_NOP) {
+        Op *it = &VEC_GET(vm->prog, ip);
+        if (it->t == OP_NOP || is_libc_word(*it))
+            break;
+        Op next = VEC_GET(vm->prog, ip + 1);
+
+        if (is_intrinsic(*it, W_DEF)) {
+            // If is def or mem construct add to defines
+            Op val = VEC_GET(vm->prog, ip - 2);
+            Op name = VEC_GET(vm->prog, ip - 1);
+
+            if (is_intrinsic(val, W_DEFINED)) {
+                int idx = find_previous_defined(defines, VEC_GET(tokens, val.index).lit_ptr);
+                assert(idx >= 0 && "Something went to wrong");
+                val.link = idx;
+            }
+
+            DefineData data = {
+                defines.cnt,
+                val.op,
+                val.t,
+                VEC_GET(tokens, name.index).lit_ptr,
+                val.link,
+            };
+            VEC_ADD(&defines, data);
+        } else if (is_intrinsic(*it, W_MEM)) {
+            Op val = VEC_GET(vm->prog, ip - 2);
+            Op *name = &VEC_GET(vm->prog, ip - 1);
+
+            if (is_intrinsic(val, W_DEFINED)) {
+                int idx = find_previous_defined(defines, VEC_GET(tokens, val.index).lit_ptr);
+                if (idx == -1) {
+                    assert(false);
+                }
+                DefineData data = VEC_GET(defines, idx);
+                while (data.link != 0) {
+                    data = VEC_GET(defines, data.link);
+                }
+
+                val.op = vm->mem_ptr;
+                vm->mem_ptr += data.val;
+                val.t = data.type;
+            }
+
+            name->link = defines.cnt;
+            DefineData data = {
+                defines.cnt,
+                val.op,
+                val.t,
+                VEC_GET(tokens, name->index).lit_ptr,
+                val.link,
+            };
+            VEC_ADD(&defines, data);
+        } else if (is_intrinsic(*it, W_DEFINED) && (!is_intrinsic(next, W_DEF) && !is_intrinsic(next, W_MEM))) {
+            // If is defined or and not pre def or mem, find repr in defines and link
+            int idx = find_previous_defined(defines, VEC_GET(tokens, it->index).lit_ptr);
+            if (idx < 0) {
+                printf("Error: Word not defined %s\n", TOKEN_LIT(it->index));
+                VEC_FREE(defines);
+                return false;
+            }
+            it->link = idx;
+        }
+        ip += 1;
+    }
+
+    // Remove constant definitions and memory definitions
+    // value name 'def' | value name 'mem'
+    for (int i = vm->prog.cnt - 1; i > 0; i--) {
+        Op it = VEC_GET(vm->prog, i);
+        if (is_intrinsic(it, W_DEF) || is_intrinsic(it, W_MEM)) {
+            delete_op(&vm->prog, i);
+            delete_op(&vm->prog, i - 1);
+            delete_op(&vm->prog, i - 2);
+        }
+    }
+
+    ip = 0;
+    while (VEC_GET(vm->prog, ip).t != OP_NOP) {
+        Op *it = &VEC_GET(vm->prog, ip);
+        if (it->t == OP_NOP)
+            break;
+        if (is_intrinsic(*it, W_DEFINED) && !is_libc_word(*it)) {
+            int idx = find_previous_defined(defines, VEC_GET(tokens, it->index).lit_ptr);
+            DefineData data = VEC_GET(defines, idx);
+            if (data.type == OP_INTRINSIC && data.val == W_DEFINED) {
+                it->op = defines.data[data.link].val;
+                it->t = defines.data[data.link].type;
+            } else {
+                it->op = data.val;
+                it->t = data.type;
+            }
+        }
+        ip += 1;
+    }
+
+#ifdef DEBUG
+    printf("=> Collected defines:\n");
+    FOR_LIST(defines) {
+        DefineData data = VEC_GET(defines, i);
+        printf("    > [%d] %ld %s %s\n", i, data.val, op_to_str((Op){.t = data.type}), CSTR(data.lit_ptr));
+    }
+#endif
+
+    VEC_FREE(defines);
+    return true;
+}
+
+// ;defined
+
 #define MAX_STACK 100
 
 typedef enum {
@@ -674,9 +842,6 @@ void error(ErrorType type, Op op, const char *msg, ...) {
 }
 
 // :linker
-bool is_intrinsic(Op o, IntrinsicType t) {
-    return o.t == OP_INTRINSIC && (IntrinsicType)o.op == t;
-}
 
 void control_flow_link(VM *vm) {
     int ip = 0;
@@ -877,10 +1042,6 @@ void interpet_binop(long *stack, int *sp, Op o) {
     }
 }
 
-bool is_libc_word(Op o) {
-    return str_eq(tokens.data[o.index].lit_ptr, "open") || str_eq(tokens.data[o.index].lit_ptr, "close") || str_eq(tokens.data[o.index].lit_ptr, "malloc") || str_eq(tokens.data[o.index].lit_ptr, "free") || str_eq(tokens.data[o.index].lit_ptr, "read") || str_eq(tokens.data[o.index].lit_ptr, "exit") || str_eq(tokens.data[o.index].lit_ptr, "lseek");
-}
-
 void interpet_libc_call(long *stack, int *sp, int *ip, Op o, VM *vm) {
     _ ip;
 
@@ -915,23 +1076,19 @@ void interpet_libc_call(long *stack, int *sp, int *ip, Op o, VM *vm) {
 
         read(fd, (void *)addr, size);
     } else if (str_eq(to_check, "free")) {
-        long addr = pop(stack, sp);
-        free((void *)addr);
+        long ptr = pop(stack, sp);
+        free((void *)ptr);
     } else if (str_eq(to_check, "exit")) {
         int code = pop(stack, sp);
         exit(code);
     }
 }
 
-void intepert_intrinsic(long *stack, int *sp, int *ip, Op o, VM *vm) {
+void interpet_intrinsic(long *stack, int *sp, int *ip, Op o, VM *vm) {
     switch (o.op) {
     case W_DEFINED: {
         if (is_libc_word(o)) {
             interpet_libc_call(stack, sp, ip, o, vm);
-        } else if (str_eq(tokens.data[o.index].lit_ptr, "i32")) {
-            try_push(stack, sp, 4, o);
-        } else if (str_eq(tokens.data[o.index].lit_ptr, "i64")) {
-            try_push(stack, sp, 8, o);
         } else {
             int def_id = find_defined(*vm, o);
             if (def_id == -1) {
@@ -1000,13 +1157,10 @@ void intepert_intrinsic(long *stack, int *sp, int *ip, Op o, VM *vm) {
         *ip += 1;
     } break;
     case W_MEM: {
-        long defined_id = pop(stack, sp);
-        long amt = pop(stack, sp);
-        vm->definedData[defined_id] = vm->mem_ptr;
-        vm->mem_ptr += amt;
-        *ip += 1;
+        assert(false && "unreachable");
     } break;
     case W_W_MEM: {
+        can_pop_amount(*sp, 2, o);
         long defined_id = pop(stack, sp);
         long val = pop(stack, sp);
         long off = vm->definedData[defined_id];
@@ -1016,49 +1170,38 @@ void intepert_intrinsic(long *stack, int *sp, int *ip, Op o, VM *vm) {
         *ip += 1;
     } break;
     case W_W_MEM64: {
-        long defined_id = pop(stack, sp);
+        can_pop_amount(*sp, 2, o);
+        long ptr = pop(stack, sp);
         long val = pop(stack, sp);
-        long off = vm->definedData[defined_id];
 
-        memcpy(vm->mem + off, &val, sizeof(long));
+        memcpy(vm->mem + ptr, &val, sizeof(long));
 
         *ip += 1;
     } break;
 
     case W_DEREF: {
-        long defined_id = pop(stack, sp);
+        can_pop_amount(*sp, 2, o);
+        long ptr = pop(stack, sp);
         long size = pop(stack, sp);
-        long off = vm->definedData[defined_id];
 
-        if (size == 4) {
-            long at;
-            memcpy(&at, vm->mem + off, size);
-            try_push(stack, sp, at, o);
-        } else if (size == 8) {
-            long at;
-            memcpy(&at, vm->mem + off, size);
-            try_push(stack, sp, at, o);
-        }
+        long at;
+        memcpy(&at, vm->mem + ptr, size);
+        try_push(stack, sp, at, o);
 
         *ip += 1;
     } break;
     case W_AS_STR: {
+        can_pop_amount(*sp, 2, o);
         long ptr = pop(stack, sp);
         long size = pop(stack, sp);
 
-        size_t temp_ptr = cstr_cpy((char *)ptr, size);
-
+        size_t temp_ptr = cstr_cpy((void *)ptr, size);
         try_push(stack, sp, push_str_to_mem(vm, temp_ptr), o);
 
         *ip += 1;
     } break;
     case W_DEF: {
-        long defined_id = pop(stack, sp);
-        long val = pop(stack, sp);
-
-        // fixme: Dont allow redefinition
-        vm->constData[defined_id] = val;
-        *ip += 1;
+        assert(false && "unreachable");
     } break;
     default:
         printf("Word not handled %s %s\n", op_to_str(o), CSTR(tokens.data[o.index].lit_ptr));
@@ -1087,7 +1230,7 @@ bool interpet(VM vm) {
             ip++;
         } break;
         case OP_INTRINSIC: {
-            intepert_intrinsic(stack, &sp, &ip, o, &vm);
+            interpet_intrinsic(stack, &sp, &ip, o, &vm);
         } break;
         case OP_DUMP: {
             printf("> Stack Dump:\n");
@@ -1173,18 +1316,6 @@ bool interpet(VM vm) {
 
 // ;interpet
 
-void print_operations(VM vm) {
-    for (int i = 0; i < vm.prog.cnt; i++) {
-        printf("[%d] OP: %s\n", i, op_to_str(vm.prog.data[i]));
-        printf("    > operand: %d\n", vm.prog.data[i].op);
-        printf("    > link: %d\n", vm.prog.data[i].link);
-        printf("    > loc: ");
-        printloc(vm.prog.data[i].l);
-        printf("\n");
-        printf("    > repr: %s\n", CSTR(tokens.data[vm.prog.data[i].index].lit_ptr));
-    }
-}
-
 int main(int argc, char **argv) {
     if (argc < 2)
         return 1;
@@ -1226,17 +1357,27 @@ int main(int argc, char **argv) {
     MEASURE(&b, "Parse tokens");
 
 #ifdef DEBUG
-    print_operations(vm);
+    // print_operations(vm);
 #endif
+    BENCH_START(&b);
+    if (!replace_defined(&vm)) {
+        goto clean;
+    }
 
+    MEASURE(&b, "Constant fold");
     BENCH_START(&b);
     control_flow_link(&vm);
     MEASURE(&b, "ControlFlowLink");
+
+#ifdef DEBUG
+    print_operations(vm);
+#endif
 
     BENCH_START(&b);
     interpet(vm);
     MEASURE(&b, "Interpet");
 
+clean:
     VEC_FREE(vm.definedTable);
     VEC_FREE(vm.prog);
     VEC_FREE(tokens);
