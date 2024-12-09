@@ -11,7 +11,7 @@ i64 buf mem
 
 "Opening file examples!" println
 
-O_RONLY "./test.txt" open . 0 ; < if
+O_RONLY "./examples/test.txt" open . 0 ; < if
 	"Failed to open file!" println
 	1 exit
 else

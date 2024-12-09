@@ -1,0 +1,1 @@
+E: ./tests/err_stack_overflow.cc:100:1: Stack overflow! Reach limit of 100. Can't push literal number 1
