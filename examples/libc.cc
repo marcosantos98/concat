@@ -1,9 +1,4 @@
-0 O_RONLY def
-
-0 SEEK_SET def
-2 SEEK_END def
-
-8 i64 def
+"./std.cc" include
 
 i64 fd mem 
 i64 size mem

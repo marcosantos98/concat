@@ -469,9 +469,19 @@ typedef struct {
 } VM;
 
 typedef struct {
+    int index;
+    long val;
+    OpType type;
+    size_t lit_ptr;
+    int link;
+} DefineData;
+List(Defines, DefineData);
+
+typedef struct {
     VM vm;
     Tokens tokens;
     char *code;
+    Defines defines;
 } ProgramRun;
 
 size_t push_str_to_mem(VM *vm, size_t temp_ptr) {
@@ -676,15 +686,6 @@ bool is_libc_word(ProgramRun prog, Op o) {
     return is_intrinsic(o, W_DEFINED) && (str_eq(VEC_GET(prog.tokens, o.index).lit_ptr, "open") || str_eq(VEC_GET(prog.tokens, o.index).lit_ptr, "close") || str_eq(VEC_GET(prog.tokens, o.index).lit_ptr, "malloc") || str_eq(VEC_GET(prog.tokens, o.index).lit_ptr, "free") || str_eq(VEC_GET(prog.tokens, o.index).lit_ptr, "read") || str_eq(VEC_GET(prog.tokens, o.index).lit_ptr, "exit") || str_eq(VEC_GET(prog.tokens, o.index).lit_ptr, "lseek"));
 }
 
-typedef struct {
-    int index;
-    long val;
-    OpType type;
-    size_t lit_ptr;
-    int link;
-} DefineData;
-List(Defines, DefineData);
-
 int find_previous_defined(Defines defines, size_t lit_ptr) {
     FOR_LIST(defines) {
         DefineData data = VEC_GET(defines, i);
@@ -704,10 +705,39 @@ void delete_op(Program *prog, int index) {
     prog->cnt--;
 }
 
+ProgramRun run_program(const char *);
+void clean_program_run(ProgramRun *);
+
+void process_include(ProgramRun *current) {
+
+    int ip = 0;
+    while (VEC_GET(current->vm.prog, ip).t != OP_NOP) {
+        Op it = VEC_GET(current->vm.prog, ip);
+        if (is_intrinsic(it, W_INCLUDE)) {
+            Op name = VEC_GET(current->vm.prog, ip - 1);
+            const char *path = CSTR(name.op);
+            ProgramRun run = run_program(path);
+            for (int i = 0; i < VEC_LEN(run.defines); i++) {
+                VEC_ADD(&current->defines, VEC_GET(run.defines, i));
+            }
+            clean_program_run(&run);
+        }
+        ip += 1;
+    }
+
+    for (int i = current->vm.prog.cnt - 1; i > 0; i--) {
+        Op it = VEC_GET(current->vm.prog, i);
+        if (is_intrinsic(it, W_INCLUDE)) {
+            delete_op(&current->vm.prog, i);
+            delete_op(&current->vm.prog, i - 1);
+        }
+    }
+
+    ip = 0;
+}
+
 bool replace_defined(ProgramRun *prog) {
     int ip = 0;
-
-    Defines defines = {0};
 
     while (VEC_GET(prog->vm.prog, ip).t != OP_NOP) {
         Op *it = &VEC_GET(prog->vm.prog, ip);
@@ -721,31 +751,31 @@ bool replace_defined(ProgramRun *prog) {
             Op name = VEC_GET(prog->vm.prog, ip - 1);
 
             if (is_intrinsic(val, W_DEFINED)) {
-                int idx = find_previous_defined(defines, VEC_GET(prog->tokens, val.index).lit_ptr);
+                int idx = find_previous_defined(prog->defines, VEC_GET(prog->tokens, val.index).lit_ptr);
                 assert(idx >= 0 && "Something went to wrong");
                 val.link = idx;
             }
 
             DefineData data = {
-                defines.cnt,
+                prog->defines.cnt,
                 val.op,
                 val.t,
                 VEC_GET(prog->tokens, name.index).lit_ptr,
                 val.link,
             };
-            VEC_ADD(&defines, data);
+            VEC_ADD(&prog->defines, data);
         } else if (is_intrinsic(*it, W_MEM)) {
             Op val = VEC_GET(prog->vm.prog, ip - 2);
             Op *name = &VEC_GET(prog->vm.prog, ip - 1);
 
             if (is_intrinsic(val, W_DEFINED)) {
-                int idx = find_previous_defined(defines, VEC_GET(prog->tokens, val.index).lit_ptr);
+                int idx = find_previous_defined(prog->defines, VEC_GET(prog->tokens, val.index).lit_ptr);
                 if (idx == -1) {
                     assert(false);
                 }
-                DefineData data = VEC_GET(defines, idx);
+                DefineData data = VEC_GET(prog->defines, idx);
                 while (data.link != 0) {
-                    data = VEC_GET(defines, data.link);
+                    data = VEC_GET(prog->defines, data.link);
                 }
 
                 val.op = prog->vm.mem_ptr;
@@ -753,21 +783,20 @@ bool replace_defined(ProgramRun *prog) {
                 val.t = data.type;
             }
 
-            name->link = defines.cnt;
+            name->link = prog->defines.cnt;
             DefineData data = {
-                defines.cnt,
+                prog->defines.cnt,
                 val.op,
                 val.t,
                 VEC_GET(prog->tokens, name->index).lit_ptr,
                 val.link,
             };
-            VEC_ADD(&defines, data);
+            VEC_ADD(&prog->defines, data);
         } else if (is_intrinsic(*it, W_DEFINED) && (!is_intrinsic(next, W_DEF) && !is_intrinsic(next, W_MEM))) {
             // If is defined or and not pre def or mem, find repr in defines and link
-            int idx = find_previous_defined(defines, VEC_GET(prog->tokens, it->index).lit_ptr);
+            int idx = find_previous_defined(prog->defines, VEC_GET(prog->tokens, it->index).lit_ptr);
             if (idx < 0) {
                 printf("Error: Word not defined %s\n", TOKEN_LIT(*prog, it->index));
-                VEC_FREE(defines);
                 return false;
             }
             it->link = idx;
@@ -792,11 +821,11 @@ bool replace_defined(ProgramRun *prog) {
         if (it->t == OP_NOP)
             break;
         if (is_intrinsic(*it, W_DEFINED) && !is_libc_word(*prog, *it)) {
-            int idx = find_previous_defined(defines, VEC_GET(prog->tokens, it->index).lit_ptr);
-            DefineData data = VEC_GET(defines, idx);
+            int idx = find_previous_defined(prog->defines, VEC_GET(prog->tokens, it->index).lit_ptr);
+            DefineData data = VEC_GET(prog->defines, idx);
             if (data.type == OP_INTRINSIC && data.val == W_DEFINED) {
-                it->op = defines.data[data.link].val;
-                it->t = defines.data[data.link].type;
+                it->op = prog->defines.data[data.link].val;
+                it->t = prog->defines.data[data.link].type;
             } else {
                 it->op = data.val;
                 it->t = data.type;
@@ -807,13 +836,12 @@ bool replace_defined(ProgramRun *prog) {
 
 #ifdef DEBUG
     printf("=> Collected defines:\n");
-    FOR_LIST(defines) {
-        DefineData data = VEC_GET(defines, i);
+    FOR_LIST(prog->defines) {
+        DefineData data = VEC_GET(prog->defines, i);
         printf("    > [%d] %ld %s %s\n", i, data.val, op_to_str((Op){.t = data.type}), CSTR(data.lit_ptr));
     }
 #endif
 
-    VEC_FREE(defines);
     return true;
 }
 
@@ -1221,7 +1249,7 @@ void interpet_intrinsic(long *stack, int *sp, int *ip, Op o, ProgramRun *prog) {
         assert(false && "unreachable");
     } break;
     case W_INCLUDE: {
-        assert(false && "not implemented yet");
+        assert(false && "unreachable");
     } break;
     default:
         printf("Word not handled %s %s\n", op_to_str(o), TOKEN_LIT(*prog, o.index));
@@ -1342,7 +1370,7 @@ void clean_program_run(ProgramRun *prog) {
     VEC_FREE(prog->vm.definedTable);
     VEC_FREE(prog->vm.prog);
     VEC_FREE(prog->tokens);
-
+    VEC_FREE(prog->defines);
     free(prog->code);
 }
 
@@ -1362,6 +1390,8 @@ ProgramRun run_program(const char *path) {
     memset(res.vm.constData, -1, sizeof(int) * MAX_DEFINED);
     parse(&res);
     MEASURE(&b, "Parse tokens");
+
+    process_include(&res);
 
 #ifdef DEBUG
     // print_operations(vm);

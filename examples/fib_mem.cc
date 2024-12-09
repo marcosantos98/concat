@@ -1,4 +1,4 @@
-8 i64 def
+"./std.cc" include
 
 i64 a mem
 i64 b mem

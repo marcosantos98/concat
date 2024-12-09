@@ -1,1 +1,5 @@
-Hello
+Sizeof(i8) == 1
+Sizeof(i16) == 2
+Sizeof(i32) == 4
+Sizeof(i64) == 8
+Sizeof(int) == 8
